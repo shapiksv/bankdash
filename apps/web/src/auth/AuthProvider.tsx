@@ -57,6 +57,7 @@ export function AuthProvider({ children, onSignedOut }: { children: ReactNode; o
           setState({ status: 'anonymous' })
         }
       },
+      reloadUser: loadUser,
     }),
     [state, loadUser],
   )

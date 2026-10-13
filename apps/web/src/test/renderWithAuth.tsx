@@ -31,6 +31,7 @@ export function renderWithAuth(path: string, options: FakeAuthOptions = {}) {
     login: vi.fn(options.login ?? (async () => {})),
     signup: vi.fn(options.signup ?? (async () => {})),
     logout: vi.fn(async () => {}),
+    reloadUser: vi.fn(async () => {}),
   }
   const api = mockFetch({
     'GET /api/profile/me': () => json(janeProfile),
