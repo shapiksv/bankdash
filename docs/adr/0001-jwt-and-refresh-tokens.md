@@ -45,6 +45,11 @@
   Postgres, so the client's next silent refresh restores the session. The gateway refetches the JWKS when it
   sees an unknown `kid`, so it needs no restart.
 - The JWKS is a list of keys, so key rotation can be added later without changing the contract.
+- **Multiple auth-service instances need a shared, configured key.** A generated key exists only in the
+  instance that created it, and each instance's JWKS publishes only its own key. With two instances, a token
+  signed by one fails validation wherever the JWKS came from the other. Any deployment with more than one
+  instance must set `bankdash.auth.private-key` to the same key on every instance. The ephemeral key is for
+  a single local instance only.
 
 ### Trade-off: no grace window
 
