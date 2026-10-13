@@ -46,6 +46,30 @@
   sees an unknown `kid`, so it needs no restart.
 - The JWKS is a list of keys, so key rotation can be added later without changing the contract.
 
+### Trade-off: no grace window
+
+A rotated token is dead the moment its successor exists. So if the client never receives the rotation
+response, its next refresh presents the old token and counts as reuse.
+
+**When it happens:**
+- the response is lost on the network after auth-service committed (connection reset, mobile network
+  switch, gateway timeout);
+- the tab is closed or crashes between the request and storing the new cookie.
+
+**Effect:** the whole family is revoked and the user must log in again on that device. Other devices are
+unaffected. Nothing is exposed: it fails closed.
+
+**Why we accept it:**
+- It needs a failure in a narrow window and costs one login.
+- A grace window would let a stolen token be replayed without detection for the length of that window.
+- The client already prevents the common self-inflicted case (parallel refreshes) with single-flight and a
+  Web Lock.
+
+**If it shows up in practice:** add a short grace window, about 10–30 s. Re-presenting a just-rotated token
+within the window would issue a new sibling in the same family instead of revoking it, and only reuse after
+the window would revoke. This needs a `rotated_at` column (a new Flyway migration) and is a contained change
+in `AuthService.refresh`.
+
 ### Refresh cookie through the gateway
 
 - **Cookie:** `bd_refresh` with `HttpOnly`, `SameSite=Strict`, `Path=/api/auth` (sent only to refresh and
@@ -67,6 +91,5 @@
 ## Consequences
 
 - Logging out on one device does not end other logins. Each login is its own family.
-- A false reuse (for example a crashed tab that refreshed but never stored the response) logs the user out.
-  We accept that in exchange for strict reuse detection.
+- **A lost refresh response logs the user out** (see *Trade-off: no grace window* below).
 - Rate limiting on the auth endpoints is not done yet.
