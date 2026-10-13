@@ -96,6 +96,9 @@ in `AuthService.refresh`.
 ## Consequences
 
 - Logging out on one device does not end other logins. Each login is its own family.
+- **Changing the password ends every login** (step 3): `PUT /auth/password` revokes all of the user's families,
+  then answers like login with a new access token and refresh cookie, so only the device that changed it stays
+  logged in.
 - **A lost refresh response logs the user out** (see *Trade-off: no grace window* below).
 - Rate limiting on the auth endpoints is not done yet. It is listed as known tech debt in
   `docs/architecture.md` §7.

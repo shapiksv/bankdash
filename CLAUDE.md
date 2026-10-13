@@ -12,8 +12,10 @@ Prerequisites: JDK 25 (Gradle toolchain; foojay downloads it if missing), Node 2
 ./gradlew test                           # unit + Testcontainers integration tests (needs Docker)
 ./gradlew :services:<svc>:bootRun        # run one service, e.g. :services:auth-service:bootRun (uses the dev profile)
 
-# Auth flow locally: infra, then auth-service (8081) and the gateway (8080), then the web app
+# Local stack: infra + topics, then auth-service (8081), profile-service (8082) and the gateway (8080), then the web app
+./infra/kafka/create-topics.sh           # creates every topic of infra/kafka/topics.txt (safe to re-run)
 ./gradlew :services:auth-service:bootRun
+./gradlew :services:profile-service:bootRun
 ./gradlew :services:api-gateway:bootRun
 
 # Infrastructure: Postgres, Kafka, Kafka UI (no .env needed; see .env.example for overrides)
@@ -38,7 +40,7 @@ Claude Code: `/step N` implements step N of `docs/architecture.md` §5 (branch �
 | Postgres | `localhost:5432` | `postgres:5432` |
 | Kafka UI | http://localhost:8090 | — |
 
-- Kafka runs a single KRaft broker. **Auto topic creation is off**: topics and their `.DLT` topics must be created by `infra/kafka`.
+- Kafka runs a single KRaft broker. **Auto topic creation is off**: every topic and its `.DLT` must be listed in `infra/kafka/topics.txt`. `create-topics.sh` creates them locally, and `libs/test-support` creates them in the test broker (also with auto-create off), so a missing entry fails the integration tests.
 - Postgres has one database and one user per service (`auth`, `profile`, `account`, `transaction`, `notification`). User = password = database name, and a service user can only connect to its own database. See `infra/postgres/init.sql`, which only runs when the volume is first created.
 - Ports: gateway 8080, auth 8081, profile 8082, account 8083, transaction 8084, notification 8085, web 5173, Kafka UI 8090.
 
@@ -49,13 +51,18 @@ build-logic/        Gradle convention plugins
                     bankdash.java-library   Java 25 toolchain, Spring BOMs, JUnit 5
                     bankdash.spring-service  Boot app with Actuator + web (for services/*)
 gradle/libs.versions.toml   version catalog — all versions live here
-libs/               shared Java libraries (events, messaging, web-common arrive in later steps)
-  test-support/     Testcontainers Postgres + Kafka, TestJwtIssuer (JWKS + tokens), published as test fixtures
+libs/               shared Java libraries
+  events/           event envelope, topic names, one record per payload (the contract between services)
+  messaging/        auto-config: transactional Outbox + relay, IdempotentConsumer, DefaultErrorHandler → <topic>.DLT
+  web-common/       auto-config for business services: JWT resource server, ProblemDetail errors, @CurrentUser
+  test-support/     Testcontainers Postgres + Kafka (+ topics), TestJwtIssuer, TopicReader; published as test fixtures
 services/           one Gradle project per microservice
-  auth-service/     signup, login, refresh, logout, /auth/me, JWKS (RS256)
+  auth-service/     signup (emits auth.user-registered.v1), login, refresh, logout, /auth/me, password, two-factor, JWKS
+  profile-service/  profile, preferences, avatar; creates profiles from auth.user-registered.v1
   api-gateway/      Spring Cloud Gateway (WebMVC): /api/** routes, JWT validation, CORS
-apps/web/           React + TS + Vite frontend (api/, auth/, layout/, pages/, routes.tsx); Vite proxies /api to :8080
-infra/              postgres/init.sql; kafka/ topic script (from step 3)
+apps/web/           React + TS + Vite frontend (api/, auth/, profile/, layout/, pages/, routes.tsx); TanStack Query;
+                    Vite proxies /api to :8080
+infra/              postgres/init.sql; kafka/topics.txt + create-topics.sh
 docs/               ui-analysis.md, architecture.md, adr/ (0001: JWT and refresh tokens)
 docker-compose.yml  infra only: postgres, kafka, kafka-ui
 ```
@@ -69,7 +76,8 @@ Any folder under `libs/` or `services/` with a `build.gradle.kts` is included au
 - **Flyway for every schema change**, in `src/main/resources/db/migration`. Never edit an applied migration; add a new one.
 - **Errors are `ProblemDetail`** (RFC 9457), including 401s from Spring Security.
 - **Auth:** the browser holds the access token in memory only; the refresh token is the httpOnly `bd_refresh` cookie. Services validate JWTs against auth-service's JWKS (`iss=bankdash-auth`, `aud=bankdash-api`, user id = `sub`). CORS is configured only in the gateway. Details: `docs/adr/0001-jwt-and-refresh-tokens.md`.
-- **Domain events only via the transactional outbox.** Never call `KafkaTemplate.send` from business code. Consumers are idempotent (`processed_event` table).
+- **Domain events only via the transactional outbox.** Never call `KafkaTemplate.send` from business code: call `Outbox.publish` inside the business transaction (producers set `bankdash.messaging.outbox.enabled: true` and own an `outbox_event` table). Listeners take a `ReceivedEvent`, read the payload with `EventPayloads.read` and wrap the handler in `IdempotentConsumer.process` (`processed_event` table). The DDL of both tables is in the Javadoc of `Outbox` and `IdempotentConsumer`; each service creates them in its own migration.
+- **Kafka errors:** transient failures are retried 3 times (1 s apart), then the record goes to `<topic>.DLT`. Unreadable records and `InvalidEventException`, validation errors or `IllegalArgumentException` go there at once. Business outcomes (e.g. insufficient funds) are events, never exceptions.
 - **Each service owns its database.** No cross-service table access and no synchronous calls between business services.
 - **Versions** go in `gradle/libs.versions.toml`; Spring-managed libraries omit the version and use the Boot BOM.
 - **Integration tests** use the shared containers, never local infra:
@@ -82,7 +90,7 @@ Any folder under `libs/` or `services/` with a `build.gradle.kts` is included au
   class SomeIT { ... }
   ```
   Testcontainers must stay off runtime classpaths, so keep it in test fixtures only. A container starts only if the service has its client (JDBC / Kafka) on the classpath.
-- Services that only validate tokens test against `TestJwtIssuer` (see `GatewayIT`) instead of running auth-service.
+- Services that only validate tokens test against `TestJwtIssuer` (see `GatewayIT`, `ProfileIT`) instead of running auth-service. Business services get their security setup from `libs/web-common`.
 - Tests and `bootRun` run in UTC (Postgres rejects some deprecated host zones such as `Europe/Kiev`).
 - Java packages: `com.bankdash.<svc>.{api,domain,app,infra}`.
 - Small, focused commits; one branch and PR per implementation step.
