@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+
+/* Colors from the BankDash Figma UI kit. */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #2d60ff;
+  --color-title: #343c6a;
+  --color-muted: #718ebf;
+  --color-nav-inactive: #b1b1b1;
+  --color-surface: #ffffff;
+  --color-canvas: #f5f7fa;
+  --color-border: #e6eff5;
+  --color-danger: #fe5c73;
+}
+
+body {
+  @apply bg-canvas font-sans text-title antialiased;
+}

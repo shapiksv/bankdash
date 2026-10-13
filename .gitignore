@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Gradle / Java
+.gradle/
+.kotlin/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+out/
+bin/
+
+# Node / web
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local environment
+.env
