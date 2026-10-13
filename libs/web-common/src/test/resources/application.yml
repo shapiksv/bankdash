@@ -1,0 +1,8 @@
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # jwk-set-uri comes from TestJwtIssuer (see WebCommonIT).
+          issuer-uri: bankdash-auth
+          audiences: bankdash-api
