@@ -9,6 +9,7 @@ dependencies {
     api(libs.spring.boot.starter.kafka)
     api(libs.spring.boot.starter.jdbc)
     api(libs.spring.boot.starter.jackson)
+    api(libs.spring.boot.starter.validation)
 
     testImplementation(testFixtures(project(":libs:test-support")))
     testImplementation(libs.spring.boot.starter.flyway)

@@ -1,5 +1,13 @@
+spring:
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+
 bankdash:
   messaging:
     outbox:
       enabled: true
       poll-interval: 100ms
+    consumer:
+      # Keeps the retry tests fast; the default is 1s.
+      retry-interval: 100ms
