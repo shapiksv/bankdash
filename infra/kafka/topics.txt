@@ -1,0 +1,7 @@
+# Every Kafka topic, one per line: <name> <partitions>. Auto topic creation is off, so a topic that is not
+# listed here does not exist. create-topics.sh creates them locally, and libs/test-support creates them in
+# the Testcontainers broker, so the integration tests fail if a topic is missing from this file.
+#
+# Every consumed topic needs its .DLT (see DefaultErrorHandler in libs/messaging).
+auth.user-registered.v1      3
+auth.user-registered.v1.DLT  3
