@@ -1,0 +1,56 @@
+package com.bankdash.messaging;
+
+import com.bankdash.events.EventEnvelope;
+import java.time.Clock;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * The only way business code emits a domain event. The event is written to the service's {@code outbox_event}
+ * table in the caller's transaction, so it exists exactly when the business change commits; {@link OutboxRelay}
+ * sends it to Kafka afterwards (at least once).
+ *
+ * <p>Needs this table, created by the service's own Flyway migration:
+ *
+ * <pre>{@code
+ * CREATE TABLE outbox_event (
+ *     id           bigserial PRIMARY KEY,   -- send order
+ *     event_id     uuid         NOT NULL UNIQUE,
+ *     topic        varchar(255) NOT NULL,
+ *     message_key  varchar(255) NOT NULL,
+ *     payload      json         NOT NULL,   -- the whole EventEnvelope, kept byte for byte (jsonb would reorder it)
+ *     created_at   timestamptz  NOT NULL,
+ *     published_at timestamptz
+ * );
+ * CREATE INDEX outbox_event_unpublished_idx ON outbox_event (id) WHERE published_at IS NULL;
+ * CREATE INDEX outbox_event_published_at_idx ON outbox_event (published_at) WHERE published_at IS NOT NULL;
+ * }</pre>
+ */
+public class Outbox {
+
+    private final OutboxRepository repository;
+    private final JsonMapper json;
+    private final Clock clock;
+
+    Outbox(OutboxRepository repository, JsonMapper json, Clock clock) {
+        this.repository = repository;
+        this.json = json;
+        this.clock = clock;
+    }
+
+    /**
+     * Records {@code payload} as an event of {@code eventType} for {@code topic}, keyed by {@code key}.
+     *
+     * @return the envelope that will be sent
+     * @throws org.springframework.transaction.IllegalTransactionStateException without a transaction: an event
+     *     written outside of the business transaction could be sent for a change that never commits
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public <T> EventEnvelope<T> publish(String topic, String key, String eventType, T payload) {
+        EventEnvelope<T> envelope = EventEnvelope.of(eventType, clock.instant(), payload);
+        repository.insert(new OutboxRepository.NewRow(
+                envelope.eventId(), topic, key, json.writeValueAsString(envelope), envelope.occurredAt()));
+        return envelope;
+    }
+}

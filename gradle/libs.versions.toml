@@ -16,6 +16,7 @@ spring-boot-gradle-plugin = { module = "org.springframework.boot:spring-boot-gra
 # Spring Boot starters (versions come from the Boot BOM)
 spring-boot-starter-actuator = { module = "org.springframework.boot:spring-boot-starter-actuator" }
 spring-boot-starter-flyway = { module = "org.springframework.boot:spring-boot-starter-flyway" }
+spring-boot-starter-jackson = { module = "org.springframework.boot:spring-boot-starter-jackson" }
 spring-boot-starter-jdbc = { module = "org.springframework.boot:spring-boot-starter-jdbc" }
 spring-boot-starter-kafka = { module = "org.springframework.boot:spring-boot-starter-kafka" }
 spring-boot-starter-security = { module = "org.springframework.boot:spring-boot-starter-security" }
