@@ -1,0 +1,5 @@
+# Test-only overrides, merged on top of src/main/resources/application.yml.
+bankdash:
+  auth:
+    # Cheap hashes keep the integration tests fast; production uses 12.
+    bcrypt-strength: 4

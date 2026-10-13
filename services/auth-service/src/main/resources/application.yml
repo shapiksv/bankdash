@@ -17,3 +17,14 @@ management:
     web:
       exposure:
         include: health,info
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+bankdash:
+  auth:
+    # Plain http://localhost in development.
+    refresh-cookie:
+      secure: false
