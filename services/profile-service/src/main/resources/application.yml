@@ -1,0 +1,37 @@
+server:
+  port: 8082
+
+bankdash:
+  services:
+    auth: ${AUTH_SERVICE_URL:http://localhost:8081}
+
+spring:
+  application:
+    name: profile-service
+  datasource:
+    url: ${PROFILE_DB_URL:jdbc:postgresql://localhost:5432/profile}
+    username: ${PROFILE_DB_USER:profile}
+    password: ${PROFILE_DB_PASSWORD:profile}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: profile-service
+      # A new consumer group starts at the beginning, so users registered before the first start get a profile.
+      auto-offset-reset: earliest
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${bankdash.services.auth}/.well-known/jwks.json
+          # With jwk-set-uri set this is only compared against the iss claim, there is no discovery.
+          issuer-uri: bankdash-auth
+          audiences: bankdash-api
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
