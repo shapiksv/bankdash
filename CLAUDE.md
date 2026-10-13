@@ -28,6 +28,8 @@ cd apps/web && npm test                  # Vitest, single run (npm run test:watc
 cd apps/web && npm run build && npm run lint
 ```
 
+Claude Code: `/step N` implements step N of `docs/architecture.md` §5 (branch → plan → wait for "approved" → commits → checks + smoke test → draft PR). Defined in `.claude/skills/step/SKILL.md`.
+
 ## Local infrastructure
 
 | What | From the host (bootRun, CLI) | From a container (docker-compose.apps.yml) |
