@@ -24,18 +24,20 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * The real gateway on a random port, with {@link TestJwtIssuer} as the JWKS source and a stub standing in for
- * auth-service. No Docker needed.
+ * The real gateway on a random port, with {@link TestJwtIssuer} as the JWKS source and stubs standing in for
+ * auth-service and profile-service. No Docker needed.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayIT {
 
     static final TestJwtIssuer issuer = TestJwtIssuer.start();
     static final StubService authService = StubService.start();
+    static final StubService profileService = StubService.start();
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("bankdash.services.auth", authService::url);
+        registry.add("bankdash.services.profile", profileService::url);
         registry.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", issuer::jwksUri);
     }
 
@@ -43,6 +45,7 @@ class GatewayIT {
     static void stop() {
         issuer.close();
         authService.close();
+        profileService.close();
     }
 
     @LocalServerPort
@@ -54,6 +57,7 @@ class GatewayIT {
     @BeforeEach
     void reset() {
         authService.lastRequest.set(null);
+        profileService.lastRequest.set(null);
     }
 
     HttpResponse<String> send(HttpRequest.Builder request) throws Exception {
@@ -145,6 +149,53 @@ class GatewayIT {
     }
 
     @Test
+    void profileRequestsGoToProfileService() throws Exception {
+        String token = issuer.token(user);
+
+        var response = send(request("/api/profile/me").header("Authorization", "Bearer " + token));
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(profileService.lastRequest.get().path()).isEqualTo("/profile/me");
+        assertThat(profileService.lastRequest.get().authorization()).isEqualTo("Bearer " + token);
+        assertThat(authService.lastRequest.get()).isNull();
+    }
+
+    @Test
+    void preferencesGoToProfileServiceWithAndWithoutATrailingPath() throws Exception {
+        String token = issuer.token(user);
+
+        send(request("/api/preferences").header("Authorization", "Bearer " + token)
+                .PUT(HttpRequest.BodyPublishers.ofString("{}")));
+
+        assertThat(profileService.lastRequest.get().path()).isEqualTo("/preferences");
+        assertThat(profileService.lastRequest.get().method()).isEqualTo("PUT");
+    }
+
+    @Test
+    void anAvatarUploadReachesProfileServiceByteForByte() throws Exception {
+        byte[] image = {(byte) 0x89, 'P', 'N', 'G', 0, (byte) 0xFF, 1, 2};
+
+        send(request("/api/profile/me/avatar")
+                .header("Authorization", "Bearer " + issuer.token(user))
+                .header("Content-Type", "image/png")
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(image)));
+
+        var seen = profileService.lastRequest.get();
+        assertThat(seen.path()).isEqualTo("/profile/me/avatar");
+        // The gateway appends ";charset=UTF-8"; profile-service ignores media type parameters.
+        assertThat(seen.contentType()).startsWith("image/png");
+        assertThat(seen.body()).isEqualTo(image);
+    }
+
+    @Test
+    void profileEndpointsNeedAToken() throws Exception {
+        var response = send(request("/api/profile/me"));
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(profileService.lastRequest.get()).isNull();
+    }
+
+    @Test
     void corsPreflightFromTheWebAppIsAllowedWithCredentials() throws Exception {
         var response = send(request("/api/auth/me")
                 .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
@@ -177,7 +228,7 @@ class GatewayIT {
         assertThat(me(issuer.token(user)).statusCode()).isEqualTo(200);
     }
 
-    record SeenRequest(String path, String authorization, String cookie) {}
+    record SeenRequest(String method, String path, String authorization, String cookie, String contentType, byte[] body) {}
 
     /** Records the last request and answers 200, with a refresh cookie on /auth/login. */
     static final class StubService implements AutoCloseable {
@@ -197,8 +248,9 @@ class GatewayIT {
                 StubService stub = new StubService(server);
                 server.createContext("/", exchange -> {
                     var headers = exchange.getRequestHeaders();
-                    stub.lastRequest.set(new SeenRequest(exchange.getRequestURI().getPath(),
-                            headers.getFirst("Authorization"), headers.getFirst("Cookie")));
+                    stub.lastRequest.set(new SeenRequest(exchange.getRequestMethod(), exchange.getRequestURI().getPath(),
+                            headers.getFirst("Authorization"), headers.getFirst("Cookie"),
+                            headers.getFirst("Content-Type"), exchange.getRequestBody().readAllBytes()));
                     if (exchange.getRequestURI().getPath().equals("/auth/login")) {
                         exchange.getResponseHeaders().add("Set-Cookie", COOKIE);
                     }

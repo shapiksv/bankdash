@@ -43,6 +43,14 @@ class AvatarApiIT extends ProfileIT {
     }
 
     @Test
+    void contentTypeParametersAreIgnoredAsTheGatewayAddsACharset() {
+        UUID userId = registeredUser("Jane Doe");
+
+        assertThat(upload(userId, "image/png;charset=UTF-8", PNG)).hasStatus(HttpStatus.NO_CONTENT);
+        assertThat(download(userId)).hasContentType("image/png");
+    }
+
+    @Test
     void aNewUploadReplacesTheOldOne() {
         UUID userId = registeredUser("Jane Doe");
         upload(userId, "image/png", PNG);
