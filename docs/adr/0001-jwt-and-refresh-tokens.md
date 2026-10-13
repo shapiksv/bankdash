@@ -97,4 +97,5 @@ in `AuthService.refresh`.
 
 - Logging out on one device does not end other logins. Each login is its own family.
 - **A lost refresh response logs the user out** (see *Trade-off: no grace window* below).
-- Rate limiting on the auth endpoints is not done yet.
+- Rate limiting on the auth endpoints is not done yet. It is listed as known tech debt in
+  `docs/architecture.md` §7.

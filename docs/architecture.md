@@ -306,6 +306,14 @@ bankdash/
 - **Observability:** Actuator health and metrics only. Distributed tracing can be added later as a learning step.
 - **Deployment:** no Kubernetes or CI/CD pipeline in the MVP.
 
+## 7. Known tech debt
+
+Things we know are missing and intend to fix, unlike the deliberate simplifications in §6.
+
+| Item | Since | Risk | Plan |
+|---|---|---|---|
+| **No rate limiting on `/api/auth/*`** (signup, login, refresh, logout). §1 lists it as a gateway responsibility, but step 2 shipped without it. | Step 2 | Online password guessing and signup spam are limited only by BCrypt's cost. | Per-IP and per-email limits at the gateway (e.g. Bucket4j), with `429` as a ProblemDetail and a `Retry-After` header. |
+
 ## Verification
 
 - Each step in §5 ends with its own ✅ check. Every check includes `./gradlew test` passing, which runs the unit and Testcontainers integration tests, plus a manual check through the UI and with `curl` through the gateway on `:8080`.
