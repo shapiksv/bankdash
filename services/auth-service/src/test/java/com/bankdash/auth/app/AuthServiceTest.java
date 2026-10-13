@@ -20,11 +20,16 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 class AuthServiceTest {
@@ -52,6 +57,63 @@ class AuthServiceTest {
         assertThatExceptionOfType(InvalidCredentialsException.class)
                 .isThrownBy(() -> service.login("nobody@example.com", "whatever1"));
         verify(passwordEncoder).matches(eq("whatever1"), eq("hash:not-a-real-password"));
+    }
+
+    /**
+     * Timing parity with the real encoder: every failed login runs exactly one BCrypt check, against a hash with
+     * the same cost factor as real users' hashes, so response time does not reveal whether the email exists.
+     * (Same response body is asserted in SignupLoginIT.)
+     */
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+        "unknown email,  nobody@example.com, secret123",
+        "wrong password, jane@example.com,   wrong-password",
+        "disabled user,  off@example.com,    secret123",
+    })
+    void everyFailedLoginCostsOneBcryptCheckAtTheRealCost(String scenario, String email, String password) {
+        var bcrypt = new RecordingEncoder(new BCryptPasswordEncoder(6));
+        var realService = new AuthService(users, refreshTokens, bcrypt, accessTokens,
+                TestAuthProperties.defaults(), Clock.fixed(NOW, ZoneOffset.UTC));
+        String realHash = bcrypt.encode("secret123");
+        when(users.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
+        when(users.findByEmail("jane@example.com")).thenReturn(Optional.of(
+                new UserCredential(UUID.randomUUID(), "jane@example.com", realHash, false, UserStatus.ACTIVE, NOW)));
+        when(users.findByEmail("off@example.com")).thenReturn(Optional.of(
+                new UserCredential(UUID.randomUUID(), "off@example.com", realHash, false, UserStatus.DISABLED, NOW)));
+        bcrypt.checkedHashes.clear();
+
+        assertThatExceptionOfType(InvalidCredentialsException.class)
+                .isThrownBy(() -> realService.login(email, password))
+                .withMessage("Invalid email or password");
+
+        assertThat(bcrypt.checkedHashes).as(scenario).hasSize(1);
+        assertThat(costOf(bcrypt.checkedHashes.getFirst())).as(scenario).isEqualTo(costOf(realHash)).isEqualTo("06");
+    }
+
+    private static String costOf(String bcryptHash) {
+        return bcryptHash.substring(4, 6); // $2a$<cost>$...
+    }
+
+    /** A real encoder that records which hashes it was asked to check. */
+    static final class RecordingEncoder implements PasswordEncoder {
+
+        final PasswordEncoder delegate;
+        final List<String> checkedHashes = new ArrayList<>();
+
+        RecordingEncoder(PasswordEncoder delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public String encode(CharSequence rawPassword) {
+            return delegate.encode(rawPassword);
+        }
+
+        @Override
+        public boolean matches(CharSequence rawPassword, String encodedPassword) {
+            checkedHashes.add(encodedPassword);
+            return delegate.matches(rawPassword, encodedPassword);
+        }
     }
 
     @Test
