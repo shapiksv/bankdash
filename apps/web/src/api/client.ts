@@ -2,7 +2,7 @@
  * fetch wrapper for the gateway. Keeps the access token in memory only (never in storage), attaches it as a
  * Bearer token, and on a 401 refreshes it once through the httpOnly refresh cookie and retries.
  *
- * Refresh tokens rotate and a reused one revokes the whole login (see docs/adr/0002), so two refreshes must
+ * Refresh tokens rotate and a reused one revokes the whole login (see docs/adr/0001), so two refreshes must
  * never race with the same cookie: concurrent callers in a tab share one in-flight refresh, and tabs take
  * turns through a Web Lock. When the next tab gets the lock, the cookie it sends is already the rotated one.
  */

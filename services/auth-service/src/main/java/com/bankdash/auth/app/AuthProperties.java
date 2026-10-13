@@ -8,7 +8,7 @@ import org.springframework.core.io.Resource;
 
 /**
  * Token and cookie settings ({@code bankdash.auth.*}). The defaults are the values from
- * {@code docs/adr/0002-jwt-and-refresh-tokens.md}.
+ * {@code docs/adr/0001-jwt-and-refresh-tokens.md}.
  *
  * @param issuer         {@code iss} of every access token
  * @param audience       {@code aud} of every access token

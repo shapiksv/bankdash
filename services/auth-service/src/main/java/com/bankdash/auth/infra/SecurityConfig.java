@@ -20,7 +20,7 @@ class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, ProblemDetailAuthenticationEntryPoint entryPoint) {
         return http
                 // Stateless API: no session, and no cookie is used for authentication except the refresh
-                // cookie, which is SameSite=Strict (see ADR 0002).
+                // cookie, which is SameSite=Strict (see ADR 0001).
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(requests -> requests

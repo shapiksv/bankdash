@@ -10,7 +10,11 @@ Prerequisites: JDK 25 (Gradle toolchain; foojay downloads it if missing), Node 2
 # Backend (from the repo root)
 ./gradlew build                          # compile + all tests
 ./gradlew test                           # unit + Testcontainers integration tests (needs Docker)
-./gradlew :services:<svc>:bootRun        # run one service, e.g. :services:auth-service:bootRun
+./gradlew :services:<svc>:bootRun        # run one service, e.g. :services:auth-service:bootRun (uses the dev profile)
+
+# Auth flow locally: infra, then auth-service (8081) and the gateway (8080), then the web app
+./gradlew :services:auth-service:bootRun
+./gradlew :services:api-gateway:bootRun
 
 # Infrastructure: Postgres, Kafka, Kafka UI (no .env needed; see .env.example for overrides)
 docker compose up -d --wait
@@ -44,11 +48,13 @@ build-logic/        Gradle convention plugins
                     bankdash.spring-service  Boot app with Actuator + web (for services/*)
 gradle/libs.versions.toml   version catalog — all versions live here
 libs/               shared Java libraries (events, messaging, web-common arrive in later steps)
-  test-support/     Testcontainers Postgres + Kafka, published as test fixtures
-services/           one Gradle project per microservice (from step 2)
-apps/web/           React + TS + Vite frontend (layout/, pages/, routes.tsx, navigation.ts)
+  test-support/     Testcontainers Postgres + Kafka, TestJwtIssuer (JWKS + tokens), published as test fixtures
+services/           one Gradle project per microservice
+  auth-service/     signup, login, refresh, logout, /auth/me, JWKS (RS256)
+  api-gateway/      Spring Cloud Gateway (WebMVC): /api/** routes, JWT validation, CORS
+apps/web/           React + TS + Vite frontend (api/, auth/, layout/, pages/, routes.tsx); Vite proxies /api to :8080
 infra/              postgres/init.sql; kafka/ topic script (from step 3)
-docs/               ui-analysis.md, architecture.md, adr/
+docs/               ui-analysis.md, architecture.md, adr/ (0001: JWT and refresh tokens)
 docker-compose.yml  infra only: postgres, kafka, kafka-ui
 ```
 
@@ -59,7 +65,8 @@ Any folder under `libs/` or `services/` with a `build.gradle.kts` is included au
 - **English only** in code, comments, docs and commit messages.
 - **Every change ships with tests.** `./gradlew test` (and `npm test` for web changes) must pass before committing.
 - **Flyway for every schema change**, in `src/main/resources/db/migration`. Never edit an applied migration; add a new one.
-- **Errors are `ProblemDetail`** (RFC 9457).
+- **Errors are `ProblemDetail`** (RFC 9457), including 401s from Spring Security.
+- **Auth:** the browser holds the access token in memory only; the refresh token is the httpOnly `bd_refresh` cookie. Services validate JWTs against auth-service's JWKS (`iss=bankdash-auth`, `aud=bankdash-api`, user id = `sub`). CORS is configured only in the gateway. Details: `docs/adr/0001-jwt-and-refresh-tokens.md`.
 - **Domain events only via the transactional outbox.** Never call `KafkaTemplate.send` from business code. Consumers are idempotent (`processed_event` table).
 - **Each service owns its database.** No cross-service table access and no synchronous calls between business services.
 - **Versions** go in `gradle/libs.versions.toml`; Spring-managed libraries omit the version and use the Boot BOM.
@@ -72,6 +79,8 @@ Any folder under `libs/` or `services/` with a `build.gradle.kts` is included au
   @Import(ContainersConfig.class)
   class SomeIT { ... }
   ```
-  Testcontainers must stay off runtime classpaths, so keep it in test fixtures only.
+  Testcontainers must stay off runtime classpaths, so keep it in test fixtures only. A container starts only if the service has its client (JDBC / Kafka) on the classpath.
+- Services that only validate tokens test against `TestJwtIssuer` (see `GatewayIT`) instead of running auth-service.
+- Tests and `bootRun` run in UTC (Postgres rejects some deprecated host zones such as `Europe/Kiev`).
 - Java packages: `com.bankdash.<svc>.{api,domain,app,infra}`.
 - Small, focused commits; one branch and PR per implementation step.
