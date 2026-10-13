@@ -1,0 +1,30 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: auth-service
+  datasource:
+    url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth}
+    username: ${AUTH_DB_USER:auth}
+    password: ${AUTH_DB_PASSWORD:auth}
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+bankdash:
+  auth:
+    # Plain http://localhost in development.
+    refresh-cookie:
+      secure: false

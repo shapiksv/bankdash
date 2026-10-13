@@ -1,0 +1,43 @@
+server:
+  port: 8080
+
+bankdash:
+  services:
+    auth: ${AUTH_SERVICE_URL:http://localhost:8081}
+  cors:
+    # The Vite dev server. Not needed when the browser goes through Vite's /api proxy (same origin),
+    # only when a page on this origin calls the gateway directly.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+spring:
+  application:
+    name: api-gateway
+  threads:
+    virtual:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Fetched lazily on the first token and cached; refetched when a token has an unknown kid.
+          jwk-set-uri: ${bankdash.services.auth}/.well-known/jwks.json
+          # With jwk-set-uri set this is only compared against the iss claim, there is no discovery.
+          issuer-uri: bankdash-auth
+          audiences: bankdash-api
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: auth-service
+              uri: ${bankdash.services.auth}
+              predicates:
+                - Path=/api/auth/**
+              filters:
+                - StripPrefix=1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

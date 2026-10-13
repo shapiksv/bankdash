@@ -40,6 +40,9 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+    // Deterministic time zone. The PostgreSQL driver sends the JVM zone on connect, and Postgres
+    // rejects deprecated aliases such as Europe/Kiev that some hosts still use.
+    systemProperty("user.timezone", "UTC")
     testLogging {
         events("passed", "skipped", "failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router'
 import { navItems } from '../navigation'
+import { Logo } from './Logo'
 
 interface SidebarProps {
   open: boolean
@@ -13,9 +14,8 @@ export function Sidebar({ open, onNavigate }: SidebarProps) {
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      <div className="flex h-24 items-center gap-2 px-9 text-2xl font-extrabold text-title">
-        <span className="grid size-8 place-items-center rounded-lg bg-title text-sm text-white">B</span>
-        BankDash.
+      <div className="flex h-24 items-center px-9">
+        <Logo />
       </div>
       <nav aria-label="Main">
         <ul className="space-y-1">

@@ -1,5 +1,6 @@
 package com.bankdash.testsupport;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -13,6 +14,9 @@ import org.testcontainers.utility.DockerImageName;
  * <p>Import it with {@code @Import(ContainersConfig.class)} on a {@code @SpringBootTest}. Spring's test
  * context cache reuses the containers across test classes that share the same configuration.
  *
+ * <p>Each container only starts when the service has the matching client on its classpath, so a service
+ * without Kafka (for example auth-service) gets Postgres only.
+ *
  * <p>Image versions match {@code docker-compose.yml}.
  */
 @TestConfiguration(proxyBeanMethods = false)
@@ -23,12 +27,14 @@ public class ContainersConfig {
 
     @Bean
     @ServiceConnection
+    @ConditionalOnClass(name = "org.springframework.jdbc.core.JdbcTemplate")
     public PostgreSQLContainer postgresContainer() {
         return new PostgreSQLContainer(POSTGRES_IMAGE);
     }
 
     @Bean
     @ServiceConnection
+    @ConditionalOnClass(name = "org.springframework.kafka.core.KafkaTemplate")
     public KafkaContainer kafkaContainer() {
         return new KafkaContainer(KAFKA_IMAGE);
     }

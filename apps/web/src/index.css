@@ -12,6 +12,13 @@
   --color-canvas: #f5f7fa;
   --color-border: #e6eff5;
   --color-danger: #fe5c73;
+  --color-success: #16dbaa;
+  /* Input fill and the "My Cards" card gradient from the Dashboard frame. */
+  --color-field: #edf1f7;
+  --color-card-from: #4c49ed;
+  --color-card-to: #0a06f4;
+
+  --shadow-button: 4px 4px 18px -2px rgb(231 228 232 / 0.8);
 }
 
 body {

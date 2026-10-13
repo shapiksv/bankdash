@@ -11,6 +11,7 @@ dependencies {
     testFixturesApi(libs.testcontainers.junit.jupiter)
     testFixturesApi(libs.testcontainers.postgresql)
     testFixturesApi(libs.testcontainers.kafka)
+    testFixturesApi(libs.nimbus.jose.jwt)
     testFixturesImplementation(libs.spring.boot.starter.test)
 
     // Only for the smoke test that proves the containers work with Spring Boot.

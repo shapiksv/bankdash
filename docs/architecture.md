@@ -29,7 +29,7 @@ Implementation follows the steps in §5, one at a time.
 | Service | Responsibility | Owns (entities) |
 |---|---|---|
 | **api-gateway** (Spring Cloud Gateway, WebMVC) | Single entry point `/api/**`. Routes requests to services, validates JWTs (JWKS from auth-service), handles CORS and basic rate limiting on auth endpoints. No business logic. | — |
-| **auth-service** | Sign up, login and refresh. Password change and the 2FA flag. Issues RS256 JWTs and publishes `/.well-known/jwks.json`. | `UserCredential` (id, email, passwordHash, twoFactorEnabled, status, createdAt), `RefreshToken` (id, userId, tokenHash, expiresAt, revoked) |
+| **auth-service** | Sign up, login and refresh. Password change and the 2FA flag. Issues RS256 JWTs and publishes `/.well-known/jwks.json`. | `UserCredential` (id, email, passwordHash, twoFactorEnabled, status, createdAt), `RefreshToken` (id, userId, familyId, tokenHash, createdAt, expiresAt, familyExpiresAt, replacedBy, revoked; see `docs/adr/0001-jwt-and-refresh-tokens.md`) |
 | **profile-service** | Personal data, preferences, Quick Transfer contacts, avatar. | `UserProfile` (userId, fullName, username, dateOfBirth, presentAddress, permanentAddress, city, postalCode, country, avatar), `Preferences` (userId, currency, timeZone, notifyOnTransfers, notifyOnMerchantOrders, notifyOnRecommendations), `Contact` (ownerId, contactUserId, displayName, position) |
 | **account-service** | **Source of truth for money.** Accounts, balances and cards. Applies debits and credits atomically. Carries out the transfer step of the saga. Runs a demo-data simulator for card payments. | `Account` (id, userId, type CHECKING/SAVINGS, currency, balance), `Card` (id, userId, accountId, type DEBIT/CREDIT, bank, holderName, last4, expiry, pinHash, status ACTIVE/BLOCKED, primary), `Posting` (id, accountId, cardId?, direction, amount, balanceAfter, category, counterparty, transferId?, occurredAt; unique (transferId, accountId)) |
 | **transaction-service** | Read-side history and analytics. Starts transfers and tracks their status. Generates receipts. Handles search. | `Transaction` (id, userId, accountId, cardId?, description, category, direction INCOME/EXPENSE, amount, balanceAfter, status, occurredAt, sourcePostingId unique), `Transfer` (id, fromUserId, toUserId, amount, note, idempotencyKey, requestHash, status PENDING/COMPLETED/FAILED, failureReason, createdAt; unique (fromUserId, idempotencyKey)) |
@@ -51,7 +51,7 @@ Each frontend widget calls one endpoint, and the page fires these calls in paral
 | **Header:** name and avatar | profile · `GET /profile/me` |
 | **Header:** bell icon and unread count | notification · `GET /notifications`, `GET /notifications/unread-count` |
 | **Header:** search | transaction · `GET /transactions?q=` (MVP searches transactions only) |
-| **Sign up / Login** (we design these screens ourselves) | auth · `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout` |
+| **Sign up / Login** (we design these screens ourselves) | auth · `POST /auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`; `GET /auth/me` |
 | **Dashboard:** My Cards | account · `GET /cards?limit=2` |
 | **Dashboard:** Recent Transaction | transaction · `GET /transactions?size=3` |
 | **Dashboard:** Weekly Activity | transaction · `GET /analytics/weekly-activity` |
@@ -305,6 +305,14 @@ bankdash/
 **Operations**
 - **Observability:** Actuator health and metrics only. Distributed tracing can be added later as a learning step.
 - **Deployment:** no Kubernetes or CI/CD pipeline in the MVP.
+
+## 7. Known tech debt
+
+Things we know are missing and intend to fix, unlike the deliberate simplifications in §6.
+
+| Item | Since | Risk | Plan |
+|---|---|---|---|
+| **No rate limiting on `/api/auth/*`** (signup, login, refresh, logout). §1 lists it as a gateway responsibility, but step 2 shipped without it. | Step 2 | Online password guessing and signup spam are limited only by BCrypt's cost. | Per-IP and per-email limits at the gateway (e.g. Bucket4j), with `429` as a ProblemDetail and a `Retry-After` header. |
 
 ## Verification
 

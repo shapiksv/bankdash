@@ -1,14 +1,10 @@
-import { render, screen, within } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter } from 'react-router'
-import { RouterProvider } from 'react-router/dom'
 import { describe, expect, it } from 'vitest'
-import { routes } from '../routes'
+import { jane, renderWithAuth } from '../test/renderWithAuth'
 
 function renderAt(path: string) {
-  const router = createMemoryRouter(routes, { initialEntries: [path] })
-  render(<RouterProvider router={router} />)
-  return router
+  return renderWithAuth(path, { state: { status: 'authenticated', user: jane } }).router
 }
 
 describe('AppLayout', () => {
@@ -70,5 +66,27 @@ describe('AppLayout', () => {
     renderAt('/does-not-exist')
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Not found')
+  })
+
+  it('shows the user and logs out from the account menu', async () => {
+    const { auth, router } = renderWithAuth('/settings', { state: { status: 'authenticated', user: jane } })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    const menu = screen.getByRole('menu', { name: 'Account' })
+    expect(menu).toHaveTextContent('jane@example.com')
+
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Log out' }))
+
+    expect(auth.logout).toHaveBeenCalledOnce()
+    expect(router.state.location.pathname).toBe('/login')
+  })
+
+  it('closes the account menu with Escape', async () => {
+    renderAt('/')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    await userEvent.keyboard('{Escape}')
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })
