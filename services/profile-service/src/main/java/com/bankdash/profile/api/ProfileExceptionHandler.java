@@ -1,5 +1,8 @@
 package com.bankdash.profile.api;
 
+import com.bankdash.profile.domain.AvatarImage.AvatarTooLargeException;
+import com.bankdash.profile.domain.AvatarImage.InvalidAvatarException;
+import com.bankdash.profile.domain.AvatarImage.UnsupportedAvatarTypeException;
 import com.bankdash.profile.domain.ProfileNotFoundException;
 import com.bankdash.profile.domain.UsernameTakenException;
 import com.bankdash.web.Problems;
@@ -28,5 +31,20 @@ class ProfileExceptionHandler {
         ProblemDetail problem = Problems.of(HttpStatus.CONFLICT, "Username taken", ex.getMessage());
         problem.setProperty("errors", List.of(Map.of("field", "username", "message", "This username is already taken")));
         return problem;
+    }
+
+    @ExceptionHandler
+    ProblemDetail handle(AvatarTooLargeException ex) {
+        return Problems.of(HttpStatus.CONTENT_TOO_LARGE, "Image too large", ex.getMessage());
+    }
+
+    @ExceptionHandler
+    ProblemDetail handle(UnsupportedAvatarTypeException ex) {
+        return Problems.of(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported image type", ex.getMessage());
+    }
+
+    @ExceptionHandler
+    ProblemDetail handle(InvalidAvatarException ex) {
+        return Problems.of(HttpStatus.BAD_REQUEST, "Invalid image", ex.getMessage());
     }
 }

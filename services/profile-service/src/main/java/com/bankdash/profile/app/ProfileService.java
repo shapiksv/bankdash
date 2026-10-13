@@ -1,6 +1,9 @@
 package com.bankdash.profile.app;
 
 import com.bankdash.events.UserRegistered;
+import com.bankdash.profile.domain.Avatar;
+import com.bankdash.profile.domain.AvatarImage;
+import com.bankdash.profile.domain.AvatarRepository;
 import com.bankdash.profile.domain.Preferences;
 import com.bankdash.profile.domain.ProfileChanges;
 import com.bankdash.profile.domain.ProfileNotFoundException;
@@ -9,6 +12,8 @@ import com.bankdash.profile.domain.ProfileRepository;
 import com.bankdash.profile.domain.UserProfile;
 import com.bankdash.profile.domain.Usernames;
 import java.time.Clock;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,11 +27,14 @@ public class ProfileService {
 
     private final ProfileRepository profiles;
     private final PreferencesRepository preferences;
+    private final AvatarRepository avatars;
     private final Clock clock;
 
-    public ProfileService(ProfileRepository profiles, PreferencesRepository preferences, Clock clock) {
+    public ProfileService(
+            ProfileRepository profiles, PreferencesRepository preferences, AvatarRepository avatars, Clock clock) {
         this.profiles = profiles;
         this.preferences = preferences;
+        this.avatars = avatars;
         this.clock = clock;
     }
 
@@ -71,5 +79,21 @@ public class ProfileService {
         preferences(changed.userId());
         preferences.update(changed);
         return changed;
+    }
+
+    public Optional<Instant> avatarUpdatedAt(UUID userId) {
+        return avatars.updatedAt(userId);
+    }
+
+    public Optional<Avatar> avatar(UUID userId) {
+        return avatars.findById(userId);
+    }
+
+    @Transactional
+    public Avatar setAvatar(UUID userId, AvatarImage image) {
+        profile(userId);
+        Avatar avatar = new Avatar(userId, image.contentType(), image.data(), clock.instant());
+        avatars.save(avatar);
+        return avatar;
     }
 }
