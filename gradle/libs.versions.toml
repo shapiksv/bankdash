@@ -29,6 +29,10 @@ spring-boot-testcontainers = { module = "org.springframework.boot:spring-boot-te
 # Spring Cloud (versions come from the Spring Cloud BOM)
 spring-cloud-starter-gateway-server-webmvc = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webmvc" }
 
+# Libraries without a starter (versions from the Boot BOM)
+jackson-databind = { module = "tools.jackson.core:jackson-databind" }
+jakarta-validation-api = { module = "jakarta.validation:jakarta.validation-api" }
+
 # Kafka client (version from the Boot BOM)
 kafka-clients = { module = "org.apache.kafka:kafka-clients" }
 
