@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { json, mockFetch, problem } from '../test/fetchMock'
-import { ApiError, apiFetch, getAccessToken, onSessionExpired, refreshAccessToken, setAccessToken } from './client'
+import { ApiError, apiBlob, apiFetch, getAccessToken, onSessionExpired, refreshAccessToken, setAccessToken } from './client'
 
 const tokens = (accessToken: string) => ({ accessToken, tokenType: 'Bearer', expiresIn: 900 })
 
@@ -118,5 +118,32 @@ describe('refreshAccessToken', () => {
 
     await expect(refreshAccessToken()).resolves.toBe('fresh')
     expect(request).toHaveBeenCalledWith('bankdash-token-refresh', expect.any(Function))
+  })
+})
+
+describe('apiBlob', () => {
+  beforeEach(() => setAccessToken(null))
+
+  it('downloads binary content with the token, refreshing it on 401', async () => {
+    setAccessToken('expired')
+    mockFetch({
+      'GET /api/profile/me/avatar': (request) =>
+        request.headers.get('Authorization') === 'Bearer fresh'
+          ? new Response(new Uint8Array([0x89, 0x50]), { headers: { 'Content-Type': 'image/png' } })
+          : problem(401),
+      'POST /api/auth/refresh': () => json(tokens('fresh')),
+    })
+
+    const blob = await apiBlob('/profile/me/avatar')
+
+    expect(blob.type).toBe('image/png')
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([0x89, 0x50]))
+  })
+
+  it('throws ApiError with the problem for error responses', async () => {
+    setAccessToken('t1')
+    mockFetch({ 'GET /api/profile/me/avatar': () => problem(404, { title: 'Not Found' }) })
+
+    await expect(apiBlob('/profile/me/avatar')).rejects.toMatchObject({ status: 404, problem: { title: 'Not Found' } })
   })
 })

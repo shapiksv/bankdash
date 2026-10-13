@@ -2,6 +2,8 @@ package com.bankdash.auth.api;
 
 import com.bankdash.auth.app.InvalidCredentialsException;
 import com.bankdash.auth.app.InvalidRefreshTokenException;
+import com.bankdash.auth.app.UnknownUserException;
+import com.bankdash.auth.app.WrongCurrentPasswordException;
 import com.bankdash.auth.domain.EmailAlreadyRegisteredException;
 import com.bankdash.auth.domain.PasswordPolicy.InvalidPasswordException;
 import java.util.List;
@@ -46,7 +48,22 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail handle(InvalidPasswordException ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
         problem.setTitle("Invalid request");
-        problem.setProperty("errors", List.of(Map.of("field", "password", "message", ex.getMessage())));
+        problem.setProperty("errors", List.of(Map.of("field", ex.field(), "message", ex.getMessage())));
+        return problem;
+    }
+
+    @ExceptionHandler
+    ProblemDetail handle(WrongCurrentPasswordException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
+        problem.setTitle("Invalid request");
+        problem.setProperty("errors", List.of(Map.of("field", "currentPassword", "message", ex.getMessage())));
+        return problem;
+    }
+
+    @ExceptionHandler
+    ProblemDetail handle(UnknownUserException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problem.setTitle("Unknown user");
         return problem;
     }
 

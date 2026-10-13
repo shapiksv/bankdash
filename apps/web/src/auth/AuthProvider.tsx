@@ -6,9 +6,16 @@ import { AuthContext, type AuthContextValue, type AuthState } from './AuthContex
 /**
  * Holds who is logged in. On start it tries to restore the session from the refresh cookie, since the access
  * token lives in memory and is gone after a reload.
+ *
+ * {@link onSignedOut} runs whenever the state becomes anonymous (logout or an expired session), e.g. to drop
+ * cached data of the previous user.
  */
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function AuthProvider({ children, onSignedOut }: { children: ReactNode; onSignedOut?: () => void }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' })
+
+  useEffect(() => {
+    if (state.status === 'anonymous') onSignedOut?.()
+  }, [state.status, onSignedOut])
 
   const loadUser = useCallback(async () => {
     const user = await authApi.fetchCurrentUser()
@@ -50,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setState({ status: 'anonymous' })
         }
       },
+      reloadUser: loadUser,
     }),
     [state, loadUser],
   )

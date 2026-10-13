@@ -18,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,7 +39,7 @@ class AuthController {
 
     @PostMapping("/signup")
     ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest request) {
-        return respond(HttpStatus.CREATED, auth.signup(request.email(), request.password()));
+        return respond(HttpStatus.CREATED, auth.signup(request.fullName(), request.email(), request.password()));
     }
 
     @PostMapping("/login")
@@ -64,8 +65,21 @@ class AuthController {
     @GetMapping("/me")
     MeResponse me(@AuthenticationPrincipal Jwt jwt) {
         return auth.findUser(UUID.fromString(jwt.getSubject()))
-                .map(user -> new MeResponse(user.id(), user.email()))
+                .map(user -> new MeResponse(user.id(), user.email(), user.twoFactorEnabled()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User no longer exists"));
+    }
+
+    /** Ends every other login and answers like login: a new access token and refresh cookie. */
+    @PutMapping("/password")
+    ResponseEntity<TokenResponse> changePassword(
+            @AuthenticationPrincipal Jwt jwt, @Valid @RequestBody ChangePasswordRequest request) {
+        return respond(HttpStatus.OK,
+                auth.changePassword(UUID.fromString(jwt.getSubject()), request.currentPassword(), request.newPassword()));
+    }
+
+    @PutMapping("/two-factor")
+    TwoFactorResponse setTwoFactor(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody TwoFactorRequest request) {
+        return new TwoFactorResponse(auth.setTwoFactorEnabled(UUID.fromString(jwt.getSubject()), request.enabled()));
     }
 
     private String refreshCookie(HttpServletRequest request) {
@@ -91,7 +105,13 @@ class AuthController {
 
     record LoginRequest(@NotBlank String email, @NotNull String password) {}
 
-    record MeResponse(UUID id, String email) {}
+    record MeResponse(UUID id, String email, boolean twoFactorEnabled) {}
+
+    record ChangePasswordRequest(@NotNull String currentPassword, @NotNull String newPassword) {}
+
+    record TwoFactorRequest(@NotNull Boolean enabled) {}
+
+    record TwoFactorResponse(boolean twoFactorEnabled) {}
 
     record TokenResponse(String accessToken, String tokenType, long expiresIn) {
 

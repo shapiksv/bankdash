@@ -85,7 +85,21 @@ export interface ApiRequestInit extends RequestInit {
   auth?: boolean
 }
 
+/** JSON request. Throws {@link ApiError} for any non-2xx response. */
 export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
+  const response = await request(path, init)
+  if (response.status === 204) {
+    return undefined as T
+  }
+  return (await response.json()) as T
+}
+
+/** Binary download, such as the avatar, with the same token handling as {@link apiFetch}. */
+export async function apiBlob(path: string, init: ApiRequestInit = {}): Promise<Blob> {
+  return (await request(path, init)).blob()
+}
+
+async function request(path: string, init: ApiRequestInit): Promise<Response> {
   const { auth = true, ...requestInit } = init
   let response = await send(path, requestInit, auth)
 
@@ -103,10 +117,7 @@ export async function apiFetch<T>(path: string, init: ApiRequestInit = {}): Prom
   if (!response.ok) {
     throw new ApiError(response.status, await readProblem(response))
   }
-  if (response.status === 204) {
-    return undefined as T
-  }
-  return (await response.json()) as T
+  return response
 }
 
 function send(path: string, init: RequestInit, auth: boolean): Promise<Response> {

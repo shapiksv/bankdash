@@ -5,17 +5,22 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.bankdash.auth.app.AccessTokenIssuer.AccessToken;
+import com.bankdash.auth.domain.PasswordPolicy.InvalidPasswordException;
 import com.bankdash.auth.domain.RefreshToken;
 import com.bankdash.auth.domain.RefreshTokenRepository;
 import com.bankdash.auth.domain.UserCredential;
 import com.bankdash.auth.domain.UserCredentialRepository;
 import com.bankdash.auth.domain.UserStatus;
+import com.bankdash.events.Topics;
+import com.bankdash.events.UserRegistered;
+import com.bankdash.messaging.Outbox;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -40,6 +45,7 @@ class AuthServiceTest {
     final RefreshTokenRepository refreshTokens = mock();
     final PasswordEncoder passwordEncoder = mock();
     final AccessTokenIssuer accessTokens = mock();
+    final Outbox outbox = mock();
     AuthService service;
 
     @BeforeEach
@@ -47,7 +53,7 @@ class AuthServiceTest {
         when(passwordEncoder.encode(anyString())).thenAnswer(call -> "hash:" + call.getArgument(0));
         when(accessTokens.issue(any(), anyString())).thenReturn(new AccessToken("jwt", Duration.ofMinutes(15)));
         service = new AuthService(users, refreshTokens, passwordEncoder, accessTokens,
-                TestAuthProperties.defaults(), Clock.fixed(NOW, ZoneOffset.UTC));
+                TestAuthProperties.defaults(), outbox, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -73,7 +79,7 @@ class AuthServiceTest {
     void everyFailedLoginCostsOneBcryptCheckAtTheRealCost(String scenario, String email, String password) {
         var bcrypt = new RecordingEncoder(new BCryptPasswordEncoder(6));
         var realService = new AuthService(users, refreshTokens, bcrypt, accessTokens,
-                TestAuthProperties.defaults(), Clock.fixed(NOW, ZoneOffset.UTC));
+                TestAuthProperties.defaults(), outbox, Clock.fixed(NOW, ZoneOffset.UTC));
         String realHash = bcrypt.encode("secret123");
         when(users.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
         when(users.findByEmail("jane@example.com")).thenReturn(Optional.of(
@@ -128,7 +134,7 @@ class AuthServiceTest {
 
     @Test
     void signupStoresANormalizedEmailAndStartsATokenFamily() {
-        Session session = service.signup("  Jane@Example.com", "secret123");
+        Session session = service.signup("Jane Doe", "  Jane@Example.com", "secret123");
 
         var user = ArgumentCaptor.forClass(UserCredential.class);
         verify(users).insert(user.capture());
@@ -142,6 +148,25 @@ class AuthServiceTest {
         assertThat(token.getValue().familyExpiresAt()).isEqualTo(NOW.plus(Duration.ofDays(30)));
         assertThat(token.getValue().tokenHash()).isEqualTo(OpaqueTokens.sha256Hex(session.refreshToken()));
         assertThat(session.refreshTokenExpiresAt()).isEqualTo(NOW.plus(Duration.ofDays(7)));
+    }
+
+    @Test
+    void signupEmitsUserRegisteredKeyedByTheUserId() {
+        service.signup("  Jane Doe ", "Jane@Example.com", "secret123");
+
+        var user = ArgumentCaptor.forClass(UserCredential.class);
+        verify(users).insert(user.capture());
+        UUID id = user.getValue().id();
+        verify(outbox).publish(Topics.AUTH_USER_REGISTERED, id.toString(), UserRegistered.TYPE,
+                new UserRegistered(id, "jane@example.com", "Jane Doe"));
+    }
+
+    @Test
+    void aRejectedPasswordEmitsNothing() {
+        assertThatExceptionOfType(InvalidPasswordException.class)
+                .isThrownBy(() -> service.signup("Jane Doe", "jane@example.com", "short"));
+
+        verify(outbox, never()).publish(any(), any(), any(), any());
     }
 
     final UserCredential jane = new UserCredential(UUID.randomUUID(), "jane@example.com", "h", false, UserStatus.ACTIVE, NOW);
@@ -211,5 +236,59 @@ class AuthServiceTest {
         when(refreshTokens.findByHashForUpdate(anyString())).thenReturn(Optional.empty());
 
         assertThatExceptionOfType(InvalidRefreshTokenException.class).isThrownBy(() -> service.refresh("nope"));
+    }
+
+    @Test
+    void changingThePasswordStoresTheNewHashRevokesEveryLoginAndStartsANewOne() {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+        when(passwordEncoder.matches("current-1", "h")).thenReturn(true);
+
+        Session session = service.changePassword(jane.id(), "current-1", "brand-new-2");
+
+        var inOrder = inOrder(users, refreshTokens);
+        inOrder.verify(users).updatePasswordHash(jane.id(), "hash:brand-new-2");
+        inOrder.verify(refreshTokens).revokeAllForUser(jane.id());
+        inOrder.verify(refreshTokens).insert(any());
+        assertThat(session.refreshToken()).isNotBlank();
+    }
+
+    @Test
+    void aWrongCurrentPasswordChangesNothing() {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+        when(passwordEncoder.matches("guess", "h")).thenReturn(false);
+
+        assertThatExceptionOfType(WrongCurrentPasswordException.class)
+                .isThrownBy(() -> service.changePassword(jane.id(), "guess", "brand-new-2"));
+        verify(users, never()).updatePasswordHash(any(), anyString());
+        verify(refreshTokens, never()).revokeAllForUser(any());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({"too short, short", "same as now, current-1"})
+    void aNewPasswordThatBreaksThePolicyIsReportedOnTheNewPasswordField(String scenario, String newPassword) {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+        when(passwordEncoder.matches("current-1", "h")).thenReturn(true);
+
+        assertThatExceptionOfType(InvalidPasswordException.class)
+                .isThrownBy(() -> service.changePassword(jane.id(), "current-1", newPassword))
+                .satisfies(e -> assertThat(e.field()).isEqualTo("newPassword"));
+        verify(users, never()).updatePasswordHash(any(), anyString());
+    }
+
+    @Test
+    void aDisabledUserCannotChangeThePassword() {
+        var off = new UserCredential(jane.id(), "jane@example.com", "h", false, UserStatus.DISABLED, NOW);
+        when(users.findById(jane.id())).thenReturn(Optional.of(off));
+
+        assertThatExceptionOfType(UnknownUserException.class)
+                .isThrownBy(() -> service.changePassword(jane.id(), "current-1", "brand-new-2"));
+    }
+
+    @Test
+    void twoFactorStoresTheFlag() {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+
+        assertThat(service.setTwoFactorEnabled(jane.id(), true)).isTrue();
+        verify(users).updateTwoFactorEnabled(jane.id(), true);
     }
 }

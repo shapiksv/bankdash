@@ -7,7 +7,7 @@ import { AuthProvider } from './AuthProvider'
 import { useAuth } from './useAuth'
 
 const tokens = (accessToken: string) => ({ accessToken, tokenType: 'Bearer', expiresIn: 900 })
-const me = { id: 'u1', email: 'jane@example.com' }
+const me = { id: 'u1', email: 'jane@example.com', twoFactorEnabled: false }
 
 function Probe() {
   const { state, login, logout } = useAuth()
@@ -81,5 +81,22 @@ describe('AuthProvider', () => {
     await act(() => fetchCurrentUser().catch(() => undefined))
 
     expect(screen.getByText('anonymous')).toBeInTheDocument()
+  })
+
+  it('reports every sign-out so cached data of the previous user can be dropped', async () => {
+    mockFetch({
+      'POST /api/auth/refresh': () => json(tokens('t1')),
+      'GET /api/auth/me': () => json(me),
+      'POST /api/auth/logout': () => new Response(null, { status: 204 }),
+    })
+    const signedOut = vi.fn()
+    render(<AuthProvider onSignedOut={signedOut}><Probe /></AuthProvider>)
+    await screen.findByText('user:jane@example.com')
+    expect(signedOut).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByText('logout'))
+
+    expect(await screen.findByText('anonymous')).toBeInTheDocument()
+    expect(signedOut).toHaveBeenCalledOnce()
   })
 })

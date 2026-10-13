@@ -312,7 +312,7 @@ Things we know are missing and intend to fix, unlike the deliberate simplificati
 
 | Item | Since | Risk | Plan |
 |---|---|---|---|
-| **No rate limiting on `/api/auth/*`** (signup, login, refresh, logout). §1 lists it as a gateway responsibility, but step 2 shipped without it. | Step 2 | Online password guessing and signup spam are limited only by BCrypt's cost. | Per-IP and per-email limits at the gateway (e.g. Bucket4j), with `429` as a ProblemDetail and a `Retry-After` header. |
+| **No rate limiting on `/api/auth/*`** (signup, login, refresh, logout, and since step 3 `PUT /auth/password`). §1 lists it as a gateway responsibility, but step 2 shipped without it. | Step 2 | Online password guessing (also of the current password with a stolen access token) and signup spam are limited only by BCrypt's cost. | Per-IP and per-email limits at the gateway (e.g. Bucket4j), with `429` as a ProblemDetail and a `Retry-After` header. |
 
 ## Verification
 

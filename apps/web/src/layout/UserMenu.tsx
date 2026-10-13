@@ -2,14 +2,20 @@ import { LogOut } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../auth/useAuth'
+import { initials, useAvatarUrl, useProfile } from '../profile/queries'
 
-/** The avatar in the header. Shows the email initial until profiles arrive (step 3). */
+/**
+ * The avatar in the header: the uploaded image, else the name's initials. Right after signup the profile may
+ * not exist yet (it arrives through Kafka), so the email's initial stands in until it does.
+ */
 export function UserMenu() {
   const { state, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const container = useRef<HTMLDivElement>(null)
   const email = state.status === 'authenticated' ? state.user.email : ''
+  const { data: profile } = useProfile()
+  const avatarUrl = useAvatarUrl(profile)
 
   useEffect(() => {
     if (!open) return
@@ -40,9 +46,13 @@ export function UserMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className="grid size-12 place-items-center rounded-full bg-primary/10 font-semibold text-primary uppercase hover:bg-primary/20"
+        className="grid size-12 place-items-center overflow-hidden rounded-full bg-primary/10 font-semibold text-primary uppercase hover:bg-primary/20"
       >
-        {email.charAt(0) || '?'}
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className="size-full object-cover" />
+        ) : (
+          <span aria-hidden>{initials(profile?.fullName, email)}</span>
+        )}
       </button>
       {open && (
         <div
@@ -50,7 +60,10 @@ export function UserMenu() {
           aria-label="Account"
           className="absolute right-0 top-14 z-20 w-64 rounded-[25px] border border-border bg-surface p-2 shadow-lg"
         >
-          <p className="truncate px-4 py-3 text-sm text-muted">{email}</p>
+          <div className="px-4 py-3">
+            {profile && <p className="truncate font-medium text-title">{profile.fullName}</p>}
+            <p className="truncate text-sm text-muted">{email}</p>
+          </div>
           <button
             type="button"
             role="menuitem"

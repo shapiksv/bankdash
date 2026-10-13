@@ -49,6 +49,11 @@ class JdbcRefreshTokenRepository implements RefreshTokenRepository {
         jdbc.sql("UPDATE refresh_token SET revoked = true WHERE family_id = ?").param(familyId).update();
     }
 
+    @Override
+    public void revokeAllForUser(UUID userId) {
+        jdbc.sql("UPDATE refresh_token SET revoked = true WHERE user_id = ? AND NOT revoked").param(userId).update();
+    }
+
     private static RefreshToken map(ResultSet rs, int row) throws SQLException {
         return new RefreshToken(
                 rs.getObject("id", UUID.class),

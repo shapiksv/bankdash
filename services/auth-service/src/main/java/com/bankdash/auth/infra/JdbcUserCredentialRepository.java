@@ -52,6 +52,16 @@ class JdbcUserCredentialRepository implements UserCredentialRepository {
                 .optional();
     }
 
+    @Override
+    public void updatePasswordHash(UUID id, String passwordHash) {
+        jdbc.sql("UPDATE user_credential SET password_hash = ? WHERE id = ?").params(passwordHash, id).update();
+    }
+
+    @Override
+    public void updateTwoFactorEnabled(UUID id, boolean enabled) {
+        jdbc.sql("UPDATE user_credential SET two_factor_enabled = ? WHERE id = ?").params(enabled, id).update();
+    }
+
     private static UserCredential map(ResultSet rs, int row) throws SQLException {
         return new UserCredential(
                 rs.getObject("id", UUID.class),
