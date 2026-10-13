@@ -1,5 +1,6 @@
 import { Bell, Menu, Search, Settings } from 'lucide-react'
 import { Link } from 'react-router'
+import { UserMenu } from './UserMenu'
 
 interface HeaderProps {
   title: string
@@ -45,13 +46,7 @@ export function Header({ title, onMenuClick }: HeaderProps) {
         <Bell className="size-6" />
       </button>
 
-      <div
-        aria-label="User avatar"
-        role="img"
-        className="grid size-12 place-items-center rounded-full bg-primary/10 font-semibold text-primary"
-      >
-        ?
-      </div>
+      <UserMenu />
     </header>
   )
 }

@@ -1,4 +1,5 @@
 import type { RouteObject } from 'react-router'
+import { RequireAuth } from './auth/RequireAuth'
 import { AppLayout } from './layout/AppLayout'
 import { AuthLayout } from './layout/AuthLayout'
 import { AccountsPage } from './pages/AccountsPage'
@@ -22,17 +23,22 @@ export const routes: RouteObject[] = [
     ],
   },
   {
-    element: <AppLayout />,
+    element: <RequireAuth />,
     children: [
-      { index: true, element: <DashboardPage /> },
-      { path: 'transactions', element: <TransactionsPage /> },
-      { path: 'accounts', element: <AccountsPage /> },
-      { path: 'investments', element: <InvestmentsPage /> },
-      { path: 'credit-cards', element: <CreditCardsPage /> },
-      { path: 'loans', element: <LoansPage /> },
-      { path: 'services', element: <ServicesPage /> },
-      { path: 'settings', element: <SettingsPage /> },
-      { path: '*', element: <NotFoundPage /> },
+      {
+        element: <AppLayout />,
+        children: [
+          { index: true, element: <DashboardPage /> },
+          { path: 'transactions', element: <TransactionsPage /> },
+          { path: 'accounts', element: <AccountsPage /> },
+          { path: 'investments', element: <InvestmentsPage /> },
+          { path: 'credit-cards', element: <CreditCardsPage /> },
+          { path: 'loans', element: <LoansPage /> },
+          { path: 'services', element: <ServicesPage /> },
+          { path: 'settings', element: <SettingsPage /> },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
     ],
   },
 ]
