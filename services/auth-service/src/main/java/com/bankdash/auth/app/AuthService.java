@@ -117,6 +117,41 @@ public class AuthService {
                 .ifPresent(token -> refreshTokens.revokeFamily(token.familyId()));
     }
 
+    /**
+     * Sets a new password and ends every login of the user, including ones a thief may hold. The caller gets a
+     * fresh session, so the device that changed the password stays logged in.
+     *
+     * @throws WrongCurrentPasswordException if {@code currentPassword} is wrong
+     * @throws PasswordPolicy.InvalidPasswordException if the new password breaks the policy or is the current one
+     * @throws UnknownUserException if the user no longer exists or is disabled
+     */
+    @Transactional
+    public Session changePassword(UUID userId, String currentPassword, String newPassword) {
+        UserCredential user = activeUser(userId);
+        if (!passwordEncoder.matches(currentPassword, user.passwordHash())) {
+            throw new WrongCurrentPasswordException();
+        }
+        PasswordPolicy.check("newPassword", newPassword);
+        if (newPassword.equals(currentPassword)) {
+            throw new PasswordPolicy.InvalidPasswordException("newPassword", "Choose a password you are not using now");
+        }
+        users.updatePasswordHash(user.id(), passwordEncoder.encode(newPassword));
+        refreshTokens.revokeAllForUser(user.id());
+        log.info("Password changed for user {}: revoked all of their refresh tokens", user.id());
+        return startSession(user);
+    }
+
+    /** Stores the Settings → Security flag only; there is no second factor yet (docs/architecture.md section 6). */
+    @Transactional
+    public boolean setTwoFactorEnabled(UUID userId, boolean enabled) {
+        users.updateTwoFactorEnabled(activeUser(userId).id(), enabled);
+        return enabled;
+    }
+
+    private UserCredential activeUser(UUID userId) {
+        return users.findById(userId).filter(UserCredential::isActive).orElseThrow(UnknownUserException::new);
+    }
+
     public Optional<UserCredential> findUser(UUID id) {
         return users.findById(id);
     }

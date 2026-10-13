@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -235,5 +236,59 @@ class AuthServiceTest {
         when(refreshTokens.findByHashForUpdate(anyString())).thenReturn(Optional.empty());
 
         assertThatExceptionOfType(InvalidRefreshTokenException.class).isThrownBy(() -> service.refresh("nope"));
+    }
+
+    @Test
+    void changingThePasswordStoresTheNewHashRevokesEveryLoginAndStartsANewOne() {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+        when(passwordEncoder.matches("current-1", "h")).thenReturn(true);
+
+        Session session = service.changePassword(jane.id(), "current-1", "brand-new-2");
+
+        var inOrder = inOrder(users, refreshTokens);
+        inOrder.verify(users).updatePasswordHash(jane.id(), "hash:brand-new-2");
+        inOrder.verify(refreshTokens).revokeAllForUser(jane.id());
+        inOrder.verify(refreshTokens).insert(any());
+        assertThat(session.refreshToken()).isNotBlank();
+    }
+
+    @Test
+    void aWrongCurrentPasswordChangesNothing() {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+        when(passwordEncoder.matches("guess", "h")).thenReturn(false);
+
+        assertThatExceptionOfType(WrongCurrentPasswordException.class)
+                .isThrownBy(() -> service.changePassword(jane.id(), "guess", "brand-new-2"));
+        verify(users, never()).updatePasswordHash(any(), anyString());
+        verify(refreshTokens, never()).revokeAllForUser(any());
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({"too short, short", "same as now, current-1"})
+    void aNewPasswordThatBreaksThePolicyIsReportedOnTheNewPasswordField(String scenario, String newPassword) {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+        when(passwordEncoder.matches("current-1", "h")).thenReturn(true);
+
+        assertThatExceptionOfType(InvalidPasswordException.class)
+                .isThrownBy(() -> service.changePassword(jane.id(), "current-1", newPassword))
+                .satisfies(e -> assertThat(e.field()).isEqualTo("newPassword"));
+        verify(users, never()).updatePasswordHash(any(), anyString());
+    }
+
+    @Test
+    void aDisabledUserCannotChangeThePassword() {
+        var off = new UserCredential(jane.id(), "jane@example.com", "h", false, UserStatus.DISABLED, NOW);
+        when(users.findById(jane.id())).thenReturn(Optional.of(off));
+
+        assertThatExceptionOfType(UnknownUserException.class)
+                .isThrownBy(() -> service.changePassword(jane.id(), "current-1", "brand-new-2"));
+    }
+
+    @Test
+    void twoFactorStoresTheFlag() {
+        when(users.findById(jane.id())).thenReturn(Optional.of(jane));
+
+        assertThat(service.setTwoFactorEnabled(jane.id(), true)).isTrue();
+        verify(users).updateTwoFactorEnabled(jane.id(), true);
     }
 }
