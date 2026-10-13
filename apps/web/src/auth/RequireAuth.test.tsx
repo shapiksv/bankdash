@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { jane, renderWithAuth } from '../test/renderWithAuth'
 
@@ -25,11 +25,11 @@ describe('RequireAuth', () => {
     expect(router.state.location.pathname).toBe('/accounts')
   })
 
-  it('renders the app for authenticated users', () => {
+  it('renders the app for authenticated users', async () => {
     renderWithAuth('/accounts', { state: { status: 'authenticated', user: jane } })
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Accounts')
-    expect(screen.getByRole('button', { name: 'Account menu' })).toHaveTextContent('j')
+    expect(await within(screen.getByRole('button', { name: 'Account menu' })).findByText('JD')).toBeInTheDocument()
   })
 
   it('keeps login and signup public', () => {
