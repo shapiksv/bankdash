@@ -1,6 +1,7 @@
 package com.bankdash.auth.api;
 
 import com.bankdash.auth.app.InvalidCredentialsException;
+import com.bankdash.auth.app.InvalidRefreshTokenException;
 import com.bankdash.auth.domain.EmailAlreadyRegisteredException;
 import com.bankdash.auth.domain.PasswordPolicy.InvalidPasswordException;
 import java.util.List;
@@ -20,6 +21,12 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 /** Turns exceptions into RFC 9457 {@link ProblemDetail} responses. */
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private final RefreshCookies cookies;
+
+    public ApiExceptionHandler(RefreshCookies cookies) {
+        this.cookies = cookies;
+    }
 
     @Override
     protected @Nullable ResponseEntity<Object> handleMethodArgumentNotValid(
@@ -55,5 +62,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
         problem.setTitle("Invalid credentials");
         return problem;
+    }
+
+    /** 401 and a cleared cookie, so the browser stops sending a token that will never work again. */
+    @ExceptionHandler
+    ResponseEntity<ProblemDetail> handle(InvalidRefreshTokenException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problem.setTitle("Session expired");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .header(HttpHeaders.SET_COOKIE, cookies.clear().toString())
+                .body(problem);
     }
 }
