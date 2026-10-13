@@ -9,6 +9,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    // Same origin for the browser: the refresh cookie is first-party and no CORS is involved.
+    proxy: {
+      '/api': 'http://localhost:8080',
+    },
   },
   test: {
     environment: 'jsdom',
