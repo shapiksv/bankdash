@@ -1,4 +1,4 @@
-package com.bankdash.messaging;
+package com.bankdash.testsupport;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -13,12 +13,22 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 
-/** Reads one topic from its current end, for asserting what was (or was not) sent. */
-final class TestTopicReader implements AutoCloseable {
+/**
+ * Reads one topic from its current end, for asserting what was (or was not) sent. Records are filtered by the
+ * caller, usually by key, because test classes share the broker and its topics.
+ *
+ * <pre>{@code
+ * try (var topic = new TopicReader(kafkaAdmin.getConfigurationProperties(), Topics.AUTH_USER_REGISTERED)) {
+ *     ... act ...
+ *     var record = topic.awaitOne(Duration.ofSeconds(10), r -> key.equals(r.key()));
+ * }
+ * }</pre>
+ */
+public final class TopicReader implements AutoCloseable {
 
     private final KafkaConsumer<String, String> consumer;
 
-    TestTopicReader(Map<String, Object> kafkaProperties, String topic) {
+    public TopicReader(Map<String, Object> kafkaProperties, String topic) {
         Map<String, Object> config = new HashMap<>(kafkaProperties);
         config.put(ConsumerConfig.GROUP_ID_CONFIG, "test-reader-" + UUID.randomUUID());
         config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
@@ -35,7 +45,7 @@ final class TestTopicReader implements AutoCloseable {
     }
 
     /** Every matching record that arrives within {@code timeout}. */
-    List<ConsumerRecord<String, String>> readFor(Duration timeout, Predicate<ConsumerRecord<String, String>> filter) {
+    public List<ConsumerRecord<String, String>> readFor(Duration timeout, Predicate<ConsumerRecord<String, String>> filter) {
         List<ConsumerRecord<String, String>> matching = new ArrayList<>();
         Instant end = Instant.now().plus(timeout);
         while (Instant.now().isBefore(end)) {
@@ -49,7 +59,7 @@ final class TestTopicReader implements AutoCloseable {
     }
 
     /** The first matching record, waiting at most {@code timeout}; fails if none arrives. */
-    ConsumerRecord<String, String> awaitOne(Duration timeout, Predicate<ConsumerRecord<String, String>> filter) {
+    public ConsumerRecord<String, String> awaitOne(Duration timeout, Predicate<ConsumerRecord<String, String>> filter) {
         Instant end = Instant.now().plus(timeout);
         while (Instant.now().isBefore(end)) {
             for (var record : consumer.poll(Duration.ofMillis(100))) {

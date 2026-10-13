@@ -38,7 +38,7 @@ class AuthController {
 
     @PostMapping("/signup")
     ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest request) {
-        return respond(HttpStatus.CREATED, auth.signup(request.email(), request.password()));
+        return respond(HttpStatus.CREATED, auth.signup(request.fullName(), request.email(), request.password()));
     }
 
     @PostMapping("/login")

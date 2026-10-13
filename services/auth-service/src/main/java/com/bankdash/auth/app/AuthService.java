@@ -6,6 +6,9 @@ import com.bankdash.auth.domain.RefreshToken;
 import com.bankdash.auth.domain.RefreshTokenRepository;
 import com.bankdash.auth.domain.UserCredential;
 import com.bankdash.auth.domain.UserCredentialRepository;
+import com.bankdash.events.Topics;
+import com.bankdash.events.UserRegistered;
+import com.bankdash.messaging.Outbox;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -26,6 +29,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenIssuer accessTokens;
     private final AuthProperties properties;
+    private final Outbox outbox;
     private final Clock clock;
     /** Compared against when the email is unknown, so both cases cost one BCrypt check. */
     private final String dummyHash;
@@ -36,25 +40,30 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             AccessTokenIssuer accessTokens,
             AuthProperties properties,
+            Outbox outbox,
             Clock clock) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.accessTokens = accessTokens;
         this.properties = properties;
+        this.outbox = outbox;
         this.clock = clock;
         this.dummyHash = passwordEncoder.encode("not-a-real-password");
     }
 
     /**
-     * Registers the user and logs them in. {@code fullName} is validated by the API but not stored here:
-     * auth does not own it. It goes into the user-registered event once the outbox exists (step 3).
+     * Registers the user and logs them in. {@code fullName} is not stored here, because auth does not own it: it
+     * travels in {@link UserRegistered}, which is written to the outbox in the same transaction, so the event
+     * exists exactly when the user does.
      */
     @Transactional
-    public Session signup(String email, String password) {
+    public Session signup(String fullName, String email, String password) {
         PasswordPolicy.check(password);
         UserCredential user = UserCredential.newUser(Emails.normalize(email), passwordEncoder.encode(password), clock.instant());
         users.insert(user);
+        outbox.publish(Topics.AUTH_USER_REGISTERED, user.id().toString(), UserRegistered.TYPE,
+                new UserRegistered(user.id(), user.email(), fullName.strip()));
         return startSession(user);
     }
 

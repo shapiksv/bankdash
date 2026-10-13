@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.bankdash.events.Topics;
 import com.bankdash.testsupport.ContainersConfig;
+import com.bankdash.testsupport.TopicReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.UUID;
@@ -42,12 +43,12 @@ class ConsumerErrorHandlingIT {
     @Autowired
     JdbcClient jdbc;
 
-    TestTopicReader dlt;
+    TopicReader dlt;
     final String key = UUID.randomUUID().toString();
 
     @BeforeEach
     void subscribe() {
-        dlt = new TestTopicReader(kafkaAdmin.getConfigurationProperties(), Topics.dlt(TOPIC));
+        dlt = new TopicReader(kafkaAdmin.getConfigurationProperties(), Topics.dlt(TOPIC));
     }
 
     @AfterEach

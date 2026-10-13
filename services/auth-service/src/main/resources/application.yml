@@ -8,8 +8,15 @@ spring:
     url: ${AUTH_DB_URL:jdbc:postgresql://localhost:5432/auth}
     username: ${AUTH_DB_USER:auth}
     password: ${AUTH_DB_PASSWORD:auth}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
   threads:
     virtual:
+      enabled: true
+
+bankdash:
+  messaging:
+    outbox:
       enabled: true
 
 management:

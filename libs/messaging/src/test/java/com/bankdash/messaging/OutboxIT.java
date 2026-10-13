@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import com.bankdash.events.Topics;
 import com.bankdash.events.UserRegistered;
 import com.bankdash.testsupport.ContainersConfig;
+import com.bankdash.testsupport.TopicReader;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.UUID;
@@ -43,12 +44,12 @@ class OutboxIT {
     @Autowired
     KafkaAdmin kafkaAdmin;
 
-    TestTopicReader topic;
+    TopicReader topic;
     final String key = UUID.randomUUID().toString();
 
     @BeforeEach
     void subscribe() {
-        topic = new TestTopicReader(kafkaAdmin.getConfigurationProperties(), TOPIC);
+        topic = new TopicReader(kafkaAdmin.getConfigurationProperties(), TOPIC);
     }
 
     @AfterEach
