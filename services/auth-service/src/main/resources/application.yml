@@ -13,6 +13,11 @@ spring:
   threads:
     virtual:
       enabled: true
+  web:
+    # Error messages are English whatever the browser or JVM locale (otherwise Bean Validation's defaults
+    # follow Accept-Language, mixed with our own English messages).
+    locale: en
+    locale-resolver: fixed
 
 bankdash:
   messaging:

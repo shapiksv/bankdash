@@ -69,6 +69,22 @@ class ProfileApiIT extends ProfileIT {
     }
 
     @Test
+    void validationMessagesAreEnglishWhateverTheBrowserLanguage() {
+        UUID userId = registeredUser("Jane Doe");
+
+        var response = mvc.put().uri("/profile/me")
+                .header("Authorization", bearer(userId))
+                .header("Accept-Language", "uk")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"fullName": "", "username": "jane", "dateOfBirth": "2999-01-01"}""")
+                .exchange();
+
+        assertThat(response).bodyJson().extractingPath("$.errors[*].message").asArray()
+                .containsExactly("must be a past date", "must not be blank");
+    }
+
+    @Test
     void aTakenUsernameIsA409WithAFieldError() {
         UUID first = registeredUser("First");
         UUID second = registeredUser("Second");
