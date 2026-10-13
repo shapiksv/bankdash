@@ -23,6 +23,17 @@ describe('SignupPage', () => {
     expect(auth.signup).not.toHaveBeenCalled()
   })
 
+  it('clears a field error as soon as the field is edited', async () => {
+    renderWithAuth('/signup')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign up' }))
+
+    await userEvent.type(screen.getByLabelText('Full name'), 'J')
+
+    expect(screen.getByLabelText('Full name')).toBeValid()
+    expect(screen.queryByText('Enter your full name')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Email')).toHaveAccessibleDescription('Enter your email')
+  })
+
   it('shows the password rule as a hint', () => {
     renderWithAuth('/signup')
 

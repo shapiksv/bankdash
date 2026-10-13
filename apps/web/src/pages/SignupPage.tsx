@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/useAuth'
@@ -14,6 +14,14 @@ export function SignupPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string>()
   const [submitting, setSubmitting] = useState(false)
+
+  /** Editing a field clears its error; the rest stay until the next submit. */
+  function edit(field: string, setValue: (value: string) => void) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      setValue(event.target.value)
+      setErrors(({ [field]: _cleared, ...rest }) => rest)
+    }
+  }
 
   if (state.status === 'authenticated') {
     return <Navigate to="/" replace />
@@ -63,7 +71,7 @@ export function SignupPage() {
           autoComplete="name"
           placeholder="Charlene Reed"
           value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
+          onChange={edit('fullName', setFullName)}
           error={errors.fullName}
         />
         <TextField
@@ -72,7 +80,7 @@ export function SignupPage() {
           autoComplete="email"
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={edit('email', setEmail)}
           error={errors.email}
         />
         <TextField
@@ -81,7 +89,7 @@ export function SignupPage() {
           autoComplete="new-password"
           placeholder="Create a password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={edit('password', setPassword)}
           error={errors.password}
           hint={`At least ${MIN_PASSWORD_LENGTH} characters`}
         />

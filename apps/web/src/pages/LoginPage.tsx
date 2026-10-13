@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { safeRedirect } from '../auth/redirect'
@@ -16,6 +16,14 @@ export function LoginPage() {
   const [formError, setFormError] = useState<string>()
   const [submitting, setSubmitting] = useState(false)
   const redirectTo = safeRedirect(params.get('from'))
+
+  /** Editing a field clears its error; the rest stay until the next submit. */
+  function edit(field: string, setValue: (value: string) => void) {
+    return (event: ChangeEvent<HTMLInputElement>) => {
+      setValue(event.target.value)
+      setErrors(({ [field]: _cleared, ...rest }) => rest)
+    }
+  }
 
   if (state.status === 'authenticated') {
     return <Navigate to={redirectTo} replace />
@@ -60,7 +68,7 @@ export function LoginPage() {
           autoComplete="email"
           placeholder="you@example.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={edit('email', setEmail)}
           error={errors.email}
         />
         <TextField
@@ -69,7 +77,7 @@ export function LoginPage() {
           autoComplete="current-password"
           placeholder="Your password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={edit('password', setPassword)}
           error={errors.password}
         />
         <PrimaryButton type="submit" disabled={submitting} className="mt-2">
