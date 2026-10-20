@@ -86,13 +86,13 @@ class OutboxIT {
 
     @Test
     void aCommittedEventIsSentWithItsKeyAndEnvelopeAndMarkedPublished() {
-        var envelope = transactions.execute(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, payload()));
+        var envelope = transactions.execute(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, payload()));
 
         var record = topic.awaitOne(Duration.ofSeconds(10), r -> key.equals(r.key()));
 
         assertThat(record.value())
                 .contains("\"eventId\":\"" + envelope.eventId() + "\"")
-                .contains("\"eventType\":\"UserRegistered\"")
+                .contains("\"eventType\":\"UserRegistered\",\"schemaVersion\":1,\"source\":\"messaging-it\"")
                 .contains("\"payload\":{\"userId\":\"" + key + "\",\"email\":\"jane@example.com\",\"fullName\":\"Jane Doe\"}");
         Awaitility.await().atMost(Duration.ofSeconds(5)).until(() -> publishedAt(envelope.eventId()) != null);
     }
@@ -100,7 +100,7 @@ class OutboxIT {
     @Test
     void nothingIsSentBeforeTheTransactionCommits() {
         transactions.executeWithoutResult(status -> {
-            outbox.publish(TOPIC, key, UserRegistered.TYPE, payload());
+            outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, payload());
 
             // The relay keeps polling meanwhile; the row is invisible to it until the commit.
             assertThat(topic.readFor(Duration.ofMillis(1500), r -> key.equals(r.key()))).isEmpty();
@@ -112,7 +112,7 @@ class OutboxIT {
     @Test
     void aRolledBackTransactionNeverSends() {
         transactions.executeWithoutResult(status -> {
-            outbox.publish(TOPIC, key, UserRegistered.TYPE, payload());
+            outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, payload());
             status.setRollbackOnly();
         });
 
@@ -124,14 +124,14 @@ class OutboxIT {
     @Test
     void publishingOutsideATransactionIsRefused() {
         assertThatExceptionOfType(IllegalTransactionStateException.class)
-                .isThrownBy(() -> outbox.publish(TOPIC, key, UserRegistered.TYPE, payload()));
+                .isThrownBy(() -> outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, payload()));
     }
 
     @Test
     void eventsWithTheSameKeyArriveInOrder() {
         for (int i = 0; i < 5; i++) {
             String name = "Jane " + i;
-            transactions.executeWithoutResult(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE,
+            transactions.executeWithoutResult(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION,
                     new UserRegistered(UUID.fromString(key), "jane@example.com", name)));
         }
 
@@ -146,7 +146,7 @@ class OutboxIT {
         try {
             for (int i = 0; i < 5; i++) {
                 String name = "Jane " + i;
-                transactions.executeWithoutResult(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE,
+                transactions.executeWithoutResult(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION,
                         new UserRegistered(UUID.fromString(key), "jane@example.com", name)));
             }
             // A no-op update moves "Jane 0" to the end of the heap, and ANALYZE makes the planner scan the (small)
@@ -209,9 +209,9 @@ class OutboxIT {
     void aRowForAMissingTopicFailsAfterMaxAttemptsAndHoldsBackOnlyLaterRowsWithItsKey() {
         String otherKey = UUID.randomUUID().toString();
         var lost = transactions.execute(status ->
-                outbox.publish("no-such-topic.v1", key, UserRegistered.TYPE, payload()));
-        var heldBack = transactions.execute(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, payload()));
-        var flowing = transactions.execute(status -> outbox.publish(TOPIC, otherKey, UserRegistered.TYPE,
+                outbox.publish("no-such-topic.v1", key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, payload()));
+        var heldBack = transactions.execute(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, payload()));
+        var flowing = transactions.execute(status -> outbox.publish(TOPIC, otherKey, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION,
                 new UserRegistered(UUID.fromString(otherKey), "john@example.com", "John Doe")));
 
         Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> "FAILED".equals(status(lost.eventId())));
@@ -223,7 +223,7 @@ class OutboxIT {
         assertThat(topic.awaitOne(Duration.ofSeconds(10), r -> otherKey.equals(r.key()))).isNotNull();
         Awaitility.await().atMost(Duration.ofSeconds(5)).until(() -> "PUBLISHED".equals(status(flowing.eventId())));
         // Written after the row failed, so a later run reads it past the FAILED row.
-        var flowingLater = transactions.execute(status -> outbox.publish(TOPIC, otherKey, UserRegistered.TYPE,
+        var flowingLater = transactions.execute(status -> outbox.publish(TOPIC, otherKey, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION,
                 new UserRegistered(UUID.fromString(otherKey), "john@example.com", "John Doe")));
         Awaitility.await().atMost(Duration.ofSeconds(5))
                 .until(() -> "PUBLISHED".equals(status(flowingLater.eventId())));
@@ -251,7 +251,7 @@ class OutboxIT {
 
     @Test
     void publishedRowsArePurgedAfterTheRetention() {
-        var envelope = transactions.execute(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, payload()));
+        var envelope = transactions.execute(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, payload()));
         Awaitility.await().atMost(Duration.ofSeconds(10)).until(() -> publishedAt(envelope.eventId()) != null);
         jdbc.sql("UPDATE outbox_event SET published_at = now() - interval '8 days' WHERE event_id = ?")
                 .param(envelope.eventId()).update();

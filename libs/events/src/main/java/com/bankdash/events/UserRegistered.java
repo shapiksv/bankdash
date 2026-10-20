@@ -8,4 +8,5 @@ import java.util.UUID;
 public record UserRegistered(@NotNull UUID userId, @NotBlank String email, @NotBlank String fullName) {
 
     public static final String TYPE = "UserRegistered";
+    public static final int SCHEMA_VERSION = 1;
 }

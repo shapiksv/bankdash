@@ -62,7 +62,7 @@ public class AuthService {
         PasswordPolicy.check(password);
         UserCredential user = UserCredential.newUser(Emails.normalize(email), passwordEncoder.encode(password), clock.instant());
         users.insert(user);
-        outbox.publish(Topics.AUTH_USER_REGISTERED, user.id().toString(), UserRegistered.TYPE,
+        outbox.publish(Topics.AUTH_USER_REGISTERED, user.id().toString(), UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION,
                 new UserRegistered(user.id(), user.email(), fullName.strip()));
         return startSession(user);
     }

@@ -3,6 +3,7 @@ package com.bankdash.auth.app;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -158,7 +159,7 @@ class AuthServiceTest {
         verify(users).insert(user.capture());
         UUID id = user.getValue().id();
         verify(outbox).publish(Topics.AUTH_USER_REGISTERED, id.toString(), UserRegistered.TYPE,
-                new UserRegistered(id, "jane@example.com", "Jane Doe"));
+                UserRegistered.SCHEMA_VERSION, new UserRegistered(id, "jane@example.com", "Jane Doe"));
     }
 
     @Test
@@ -166,7 +167,7 @@ class AuthServiceTest {
         assertThatExceptionOfType(InvalidPasswordException.class)
                 .isThrownBy(() -> service.signup("Jane Doe", "jane@example.com", "short"));
 
-        verify(outbox, never()).publish(any(), any(), any(), any());
+        verify(outbox, never()).publish(any(), any(), any(), anyInt(), any());
     }
 
     final UserCredential jane = new UserCredential(UUID.randomUUID(), "jane@example.com", "h", false, UserStatus.ACTIVE, NOW);

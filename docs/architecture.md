@@ -85,8 +85,8 @@ Each frontend widget calls one endpoint, and the page fires these calls in paral
 - **Service-to-service:** the only synchronous call is gateway/services fetching JWKS from auth-service, which is cached. No business service calls another business service synchronously. This is intentional: it keeps services independent.
 
 **Asynchronous (Kafka).** Every event shares these rules:
-- **Envelope:** `eventId`, `eventType`, `occurredAt`, `payload`.
-- **Format:** JSON. Topics carry a `.v1` suffix.
+- **Envelope:** `eventId`, `eventType`, `schemaVersion`, `source`, `occurredAt`, `payload` (`EventEnvelope` in `libs/events`). `source` is the producing service (`spring.application.name`). `schemaVersion` is the payload's version, starting at 1; it goes up with a compatible change, such as a new optional field. Consumers reject an envelope without either field (DLT).
+- **Format:** JSON. Topics carry a `.v1` suffix, which changes only with an incompatible payload change.
 - **Message key:** the one shown below, so events for the same key stay in order.
 - **Sending:** through a **transactional outbox**. A row that still fails after `bankdash.messaging.outbox.max-attempts` sends becomes `FAILED` (logged at ERROR) and holds back later rows with the same key until someone sets it back to `PENDING`; rows with other keys keep flowing.
 - **Receiving:** consumers are **idempotent** (they keep a `processed_event` table).

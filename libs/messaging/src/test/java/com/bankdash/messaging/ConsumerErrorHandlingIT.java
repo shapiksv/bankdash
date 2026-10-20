@@ -58,7 +58,8 @@ class ConsumerErrorHandlingIT {
 
     static String envelope(UUID eventId, String fullName) {
         return """
-                {"eventId":"%s","eventType":"UserRegistered","occurredAt":"2026-10-13T10:00:00Z",\
+                {"eventId":"%s","eventType":"UserRegistered","schemaVersion":1,"source":"auth-service",\
+                "occurredAt":"2026-10-13T10:00:00Z",\
                 "payload":{"userId":"%s","email":"jane@example.com","fullName":"%s"}}"""
                 .formatted(eventId, UUID.randomUUID(), fullName);
     }
@@ -132,11 +133,38 @@ class ConsumerErrorHandlingIT {
     @Test
     void anEnvelopeWithoutItsIdGoesToTheDlt() throws Exception {
         send("""
-                {"eventType":"UserRegistered","occurredAt":"2026-10-13T10:00:00Z","payload":{}}""");
+                {"eventType":"UserRegistered","schemaVersion":1,"source":"auth-service",\
+                "occurredAt":"2026-10-13T10:00:00Z","payload":{}}""");
 
         var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
         assertThat(header(dead, "kafka_dlt-exception-fqcn"))
                 .isEqualTo("org.springframework.kafka.support.serializer.DeserializationException");
+    }
+
+    /** Rejected by the deserializer's validation, so the listener never sees it. */
+    @Test
+    void anEnvelopeWithoutItsSourceGoesToTheDlt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe").replace("\"source\":\"auth-service\",", ""));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-fqcn"))
+                .isEqualTo("org.springframework.kafka.support.serializer.DeserializationException");
+        assertThat(listener.deliveries(eventId)).isZero();
+    }
+
+    /** Rejected by the deserializer's validation, so the listener never sees it. */
+    @Test
+    void anEnvelopeWithoutItsSchemaVersionGoesToTheDlt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe").replace("\"schemaVersion\":1,", ""));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-fqcn"))
+                .isEqualTo("org.springframework.kafka.support.serializer.DeserializationException");
+        assertThat(listener.deliveries(eventId)).isZero();
     }
 
     @Test
@@ -144,8 +172,8 @@ class ConsumerErrorHandlingIT {
         UUID eventId = UUID.randomUUID();
 
         send("""
-                {"eventId":"%s","eventType":"UserRegistered","occurredAt":"2026-10-13T10:00:00Z",\
-                "payload":{"email":"jane@example.com"}}""".formatted(eventId));
+                {"eventId":"%s","eventType":"UserRegistered","schemaVersion":1,"source":"auth-service",\
+                "occurredAt":"2026-10-13T10:00:00Z","payload":{"email":"jane@example.com"}}""".formatted(eventId));
 
         var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
         assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(InvalidEventException.class.getName());

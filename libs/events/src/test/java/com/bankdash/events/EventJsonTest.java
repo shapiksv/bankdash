@@ -16,13 +16,14 @@ class EventJsonTest {
     final UUID eventId = UUID.fromString("00000000-0000-0000-0000-00000000000e");
     final UUID userId = UUID.fromString("00000000-0000-0000-0000-000000000001");
     final EventEnvelope<UserRegistered> envelope = new EventEnvelope<>(eventId, UserRegistered.TYPE,
-            Instant.parse("2026-10-13T10:00:00Z"), new UserRegistered(userId, "jane@example.com", "Jane Doe"));
+            UserRegistered.SCHEMA_VERSION, "auth-service", Instant.parse("2026-10-13T10:00:00Z"),
+            new UserRegistered(userId, "jane@example.com", "Jane Doe"));
 
     @Test
     void userRegisteredHasTheDocumentedShape() {
         assertThat(json.writeValueAsString(envelope)).isEqualTo("""
-                {"eventId":"00000000-0000-0000-0000-00000000000e","eventType":"UserRegistered",\
-                "occurredAt":"2026-10-13T10:00:00Z","payload":{"userId":"00000000-0000-0000-0000-000000000001",\
+                {"eventId":"00000000-0000-0000-0000-00000000000e","eventType":"UserRegistered","schemaVersion":1,\
+                "source":"auth-service","occurredAt":"2026-10-13T10:00:00Z","payload":{"userId":"00000000-0000-0000-0000-000000000001",\
                 "email":"jane@example.com","fullName":"Jane Doe"}}""");
     }
 
@@ -40,8 +41,8 @@ class EventJsonTest {
 
     @Test
     void newEnvelopesGetAFreshId() {
-        var a = EventEnvelope.of(UserRegistered.TYPE, Instant.EPOCH, "x");
-        var b = EventEnvelope.of(UserRegistered.TYPE, Instant.EPOCH, "x");
+        var a = EventEnvelope.of(UserRegistered.TYPE, 1, "test", Instant.EPOCH, "x");
+        var b = EventEnvelope.of(UserRegistered.TYPE, 1, "test", Instant.EPOCH, "x");
 
         assertThat(a.eventId()).isNotEqualTo(b.eventId());
     }

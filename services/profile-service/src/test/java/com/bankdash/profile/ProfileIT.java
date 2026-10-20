@@ -61,7 +61,8 @@ public abstract class ProfileIT {
 
     /** Sends a user-registered event the way auth-service's outbox does. */
     protected EventEnvelope<UserRegistered> register(UUID userId, String email, String fullName) {
-        var envelope = EventEnvelope.of(UserRegistered.TYPE, Instant.now(), new UserRegistered(userId, email, fullName));
+        var envelope = EventEnvelope.of(UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION, "auth-service",
+                Instant.now(), new UserRegistered(userId, email, fullName));
         send(userId.toString(), json.writeValueAsString(envelope));
         return envelope;
     }

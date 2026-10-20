@@ -83,6 +83,8 @@ class SignupEventIT {
         var envelope = json.readTree(record.value());
         assertThat(envelope.get("eventId").asString()).isNotBlank();
         assertThat(envelope.get("eventType").asString()).isEqualTo("UserRegistered");
+        assertThat(envelope.get("schemaVersion").asInt()).isEqualTo(1);
+        assertThat(envelope.get("source").asString()).isEqualTo("auth-service");
         assertThat(envelope.get("occurredAt").asString()).isNotBlank();
         var payload = envelope.get("payload");
         assertThat(payload.get("userId").asString()).isEqualTo(userId);

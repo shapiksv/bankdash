@@ -152,7 +152,8 @@ class UserRegisteredListenerIT extends ProfileIT {
         long before = jdbc.sql("SELECT count(*) FROM user_profile").query(Long.class).single();
 
         send(key, """
-                {"eventId":"%s","eventType":"UserRegistered","occurredAt":"2026-10-13T10:00:00Z",\
+                {"eventId":"%s","eventType":"UserRegistered","schemaVersion":1,"source":"auth-service",\
+                "occurredAt":"2026-10-13T10:00:00Z",\
                 "payload":{"email":"jane@example.com","fullName":"Jane Doe"}}""".formatted(UUID.randomUUID()));
 
         var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));

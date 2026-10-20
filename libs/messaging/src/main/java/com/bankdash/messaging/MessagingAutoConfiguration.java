@@ -17,6 +17,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.kafka.autoconfigure.DefaultKafkaConsumerFactoryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -105,9 +106,11 @@ public class MessagingAutoConfiguration {
     @ConditionalOnProperty(name = "bankdash.messaging.outbox.enabled", havingValue = "true")
     static class OutboxConfiguration {
 
+        /** The envelope's {@code source} is {@code spring.application.name}, which every service sets. */
         @Bean
-        Outbox outbox(JdbcClient jdbc, JsonMapper json, ObjectProvider<Clock> clock) {
-            return new Outbox(new JdbcOutboxRepository(jdbc), json, clock.getIfAvailable(Clock::systemUTC));
+        Outbox outbox(JdbcClient jdbc, JsonMapper json, ObjectProvider<Clock> clock, Environment environment) {
+            return new Outbox(new JdbcOutboxRepository(jdbc), json, clock.getIfAvailable(Clock::systemUTC),
+                    environment.getRequiredProperty("spring.application.name"));
         }
 
         @Bean

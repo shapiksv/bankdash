@@ -36,23 +36,29 @@ public class Outbox {
     private final OutboxRepository repository;
     private final JsonMapper json;
     private final Clock clock;
+    private final String source;
 
-    Outbox(OutboxRepository repository, JsonMapper json, Clock clock) {
+    /** @param source this service's name, sent as every envelope's {@code source} */
+    Outbox(OutboxRepository repository, JsonMapper json, Clock clock, String source) {
         this.repository = repository;
         this.json = json;
         this.clock = clock;
+        this.source = source;
     }
 
     /**
      * Records {@code payload} as an event of {@code eventType} for {@code topic}, keyed by {@code key}.
+     *
+     * @param eventType     the payload record's {@code TYPE}
+     * @param schemaVersion the payload record's {@code SCHEMA_VERSION}
      *
      * @return the envelope that will be sent
      * @throws org.springframework.transaction.IllegalTransactionStateException without a transaction: an event
      *     written outside of the business transaction could be sent for a change that never commits
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public <T> EventEnvelope<T> publish(String topic, String key, String eventType, T payload) {
-        EventEnvelope<T> envelope = EventEnvelope.of(eventType, clock.instant(), payload);
+    public <T> EventEnvelope<T> publish(String topic, String key, String eventType, int schemaVersion, T payload) {
+        EventEnvelope<T> envelope = EventEnvelope.of(eventType, schemaVersion, source, clock.instant(), payload);
         repository.insert(new OutboxRepository.NewRow(
                 envelope.eventId(), topic, key, json.writeValueAsString(envelope), envelope.occurredAt()));
         return envelope;
