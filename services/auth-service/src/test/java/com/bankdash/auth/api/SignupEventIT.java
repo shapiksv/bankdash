@@ -1,12 +1,16 @@
 package com.bankdash.auth.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
+import com.bankdash.auth.domain.RefreshTokenRepository;
 import com.bankdash.events.Topics;
 import com.bankdash.testsupport.ContainersConfig;
 import com.bankdash.testsupport.TopicReader;
 import java.time.Duration;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.core.KafkaAdmin;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import org.springframework.test.web.servlet.assertj.MvcTestResult;
 import tools.jackson.databind.json.JsonMapper;
@@ -39,6 +44,9 @@ class SignupEventIT {
 
     @Autowired
     JsonMapper json;
+
+    @MockitoSpyBean
+    RefreshTokenRepository refreshTokens;
 
     TopicReader topic;
     final String email = "user-" + UUID.randomUUID() + "@example.com";
@@ -91,8 +99,34 @@ class SignupEventIT {
         assertThat(signup(email)).hasStatus(HttpStatus.CONFLICT);
 
         // The failed signup rolled back, so its outbox row never existed.
-        assertThat(jdbc.sql("SELECT count(*) FROM outbox_event WHERE payload->'payload'->>'email' = ?").param(email)
-                .query(Long.class).single()).isOne();
+        assertThat(outboxRows()).isOne();
         assertThat(topic.readFor(Duration.ofSeconds(2), r -> r.value().contains(email))).isEmpty();
+    }
+
+    /** The session is started after the event is written, so this fails the transaction after the outbox write. */
+    @Test
+    void aSignupThatFailsAfterWritingTheEventLeavesNeitherTheUserNorTheEvent() {
+        AtomicLong rowsBeforeFailure = new AtomicLong(-1);
+        doAnswer(invocation -> {
+            // Same thread, same transaction: the uncommitted outbox row is visible here.
+            rowsBeforeFailure.set(outboxRows());
+            throw new IllegalStateException("Refresh token store unavailable");
+        }).when(refreshTokens).insert(any());
+
+        // MockMvc has no error page; a running server answers 500.
+        assertThat(signup(email)).failure().rootCause()
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Refresh token store unavailable");
+
+        assertThat(rowsBeforeFailure).hasValue(1);
+        assertThat(outboxRows()).isZero();
+        assertThat(jdbc.sql("SELECT count(*) FROM user_credential WHERE email = ?").param(email)
+                .query(Long.class).single()).isZero();
+        assertThat(topic.readFor(Duration.ofSeconds(2), r -> r.value().contains(email))).isEmpty();
+    }
+
+    long outboxRows() {
+        return jdbc.sql("SELECT count(*) FROM outbox_event WHERE payload->'payload'->>'email' = ?").param(email)
+                .query(Long.class).single();
     }
 }
