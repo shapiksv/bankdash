@@ -22,3 +22,6 @@ coverage/
 
 # Local environment
 .env
+
+# Local smoke-test output of /spec-implement
+specs/*/smoke-test.log
