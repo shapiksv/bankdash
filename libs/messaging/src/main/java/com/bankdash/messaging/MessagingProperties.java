@@ -17,7 +17,8 @@ public record MessagingProperties(@DefaultValue Outbox outbox, @DefaultValue Con
      * @param enabled      whether this service has an outbox (its {@code outbox_event} table) and runs the relay
      * @param pollInterval pause between two relay runs
      * @param batchSize    rows sent per relay run
-     * @param sendTimeout  how long the relay waits for the broker to acknowledge one record
+     * @param sendTimeout  how long one record may take, from waiting for topic metadata to the broker's ack;
+     *                     the relay's producer gives the record up after that
      * @param retention    how long published rows are kept before they are deleted
      */
     public record Outbox(

@@ -4,10 +4,12 @@ import com.bankdash.events.Topics;
 import jakarta.validation.ValidationException;
 import jakarta.validation.Validator;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.Map;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -108,15 +110,12 @@ public class MessagingAutoConfiguration {
             return new Outbox(new JdbcOutboxRepository(jdbc), json, clock.getIfAvailable(Clock::systemUTC));
         }
 
-        /**
-         * Uses Boot's template, whose serializers are Strings by default: the outbox row already holds the JSON,
-         * so it is sent byte for byte.
-         */
         @Bean
-        @SuppressWarnings("unchecked")
-        OutboxRelay outboxRelay(JdbcClient jdbc, KafkaTemplate<?, ?> kafka, PlatformTransactionManager transactionManager,
-                MessagingProperties properties, ObjectProvider<Clock> clock) {
-            return new OutboxRelay(new JdbcOutboxRepository(jdbc), (KafkaTemplate<String, String>) kafka,
+        OutboxRelay outboxRelay(JdbcClient jdbc, ProducerFactory<?, ?> producerFactory,
+                PlatformTransactionManager transactionManager, MessagingProperties properties, ObjectProvider<Clock> clock) {
+            KafkaTemplate<String, String> kafka =
+                    new KafkaTemplate<>(relayProducerFactory(producerFactory, properties.outbox().sendTimeout()));
+            return new OutboxRelay(new JdbcOutboxRepository(jdbc), kafka,
                     new TransactionTemplate(transactionManager), properties.outbox(), clock.getIfAvailable(Clock::systemUTC));
         }
 
@@ -124,5 +123,23 @@ public class MessagingAutoConfiguration {
         OutboxRelayScheduler outboxRelayScheduler(OutboxRelay relay, MessagingProperties properties) {
             return new OutboxRelayScheduler(relay, properties.outbox().pollInterval());
         }
+    }
+
+    /**
+     * Boot's producer settings, with String serializers (the outbox row already holds the JSON, so it is sent byte
+     * for byte) and every producer timeout bounded by {@code sendTimeout}: {@code send} blocks for metadata at most
+     * that long, and the producer gives a record up after it instead of delivering it later, when the relay has
+     * already counted it as failed and would send it again.
+     */
+    @SuppressWarnings("unchecked")
+    static ProducerFactory<String, String> relayProducerFactory(ProducerFactory<?, ?> producerFactory, Duration sendTimeout) {
+        int timeoutMs = Math.toIntExact(sendTimeout.toMillis());
+        return (ProducerFactory<String, String>) producerFactory.copyWithConfigurationOverride(Map.of(
+                ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
+                ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
+                ProducerConfig.MAX_BLOCK_MS_CONFIG, (long) timeoutMs,
+                ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, timeoutMs,
+                // Kafka requires delivery.timeout.ms >= linger.ms + request.timeout.ms.
+                ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, timeoutMs / 2));
     }
 }

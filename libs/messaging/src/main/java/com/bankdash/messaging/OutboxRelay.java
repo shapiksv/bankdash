@@ -2,6 +2,7 @@ package com.bankdash.messaging;
 
 import com.bankdash.messaging.OutboxRepository.PendingRow;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -16,10 +17,16 @@ import org.springframework.transaction.support.TransactionOperations;
  * <p>Delivery is at least once: a crash between the broker's ack and the commit of {@code published_at} sends
  * the row again on the next run, and consumers drop the duplicate by {@code eventId}. A failed send ends the run
  * so that no later row overtakes it; the next run starts again from the failed row.
+ *
+ * <p>The relay's producer gives a record up after {@code sendTimeout} (see
+ * {@link MessagingAutoConfiguration#relayProducerFactory}), so a send ends within that time with the producer's
+ * own result. The relay waits a little longer than that only as a safety net.
  */
 public class OutboxRelay {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
+    /** Beyond {@code sendTimeout}, so that the producer, not this wait, decides whether a record failed. */
+    static final Duration SEND_GRACE = Duration.ofMillis(500);
 
     private final OutboxRepository repository;
     private final KafkaOperations<String, String> kafka;
@@ -62,7 +69,7 @@ public class OutboxRelay {
     private boolean send(PendingRow row) {
         try {
             kafka.send(row.topic(), row.key(), row.payload())
-                    .get(properties.sendTimeout().toMillis(), TimeUnit.MILLISECONDS);
+                    .get(properties.sendTimeout().plus(SEND_GRACE).toMillis(), TimeUnit.MILLISECONDS);
             return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

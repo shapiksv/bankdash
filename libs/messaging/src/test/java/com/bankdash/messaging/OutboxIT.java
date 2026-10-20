@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.KafkaException;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
@@ -31,6 +32,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.kafka.core.KafkaOperations;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.IllegalTransactionStateException;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -194,6 +196,17 @@ class OutboxIT {
         return topic.readFor(Duration.ofSeconds(1), r -> key.equals(r.key())).stream()
                 .map(r -> r.value().replaceAll(".*\"fullName\":\"([^\"]+)\".*", "$1"))
                 .toList();
+    }
+
+    @Test
+    void theRelaySendsWithItsOwnProducerTimeouts() {
+        var template = (KafkaTemplate<?, ?>) ReflectionTestUtils.getField(relay, "kafka");
+
+        long sendTimeout = properties.outbox().sendTimeout().toMillis();
+        assertThat(template.getProducerFactory().getConfigurationProperties())
+                .containsEntry(ProducerConfig.MAX_BLOCK_MS_CONFIG, sendTimeout)
+                .containsEntry(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, (int) sendTimeout)
+                .containsEntry(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, (int) sendTimeout / 2);
     }
 
     @Test

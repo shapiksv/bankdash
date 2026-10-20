@@ -26,12 +26,13 @@ import org.springframework.transaction.support.TransactionOperations;
 class OutboxRelayTest {
 
     static final Instant NOW = Instant.parse("2026-10-13T10:00:00Z");
+    static final Duration SEND_TIMEOUT = Duration.ofMillis(200);
 
     final OutboxRepository repository = mock();
     @SuppressWarnings("unchecked")
     final KafkaOperations<String, String> kafka = mock(KafkaOperations.class);
     final OutboxRelay relay = new OutboxRelay(repository, kafka, TransactionOperations.withoutTransaction(),
-            new MessagingProperties.Outbox(true, Duration.ofMillis(500), 100, Duration.ofSeconds(1), Duration.ofDays(7)),
+            new MessagingProperties.Outbox(true, Duration.ofMillis(500), 100, SEND_TIMEOUT, Duration.ofDays(7)),
             Clock.fixed(NOW, ZoneOffset.UTC));
 
     static PendingRow row(long id) {
@@ -76,6 +77,20 @@ class OutboxRelayTest {
 
         assertThat(relay.publishPending()).isZero();
         verify(repository, never()).markPublished(anyLong(), any());
+    }
+
+    @Test
+    void aSendThatNeverCompletesEndsTheRunAfterAboutTheSendTimeout() {
+        when(repository.lockPending(100)).thenReturn(List.of(row(1), row(2)));
+        when(kafka.send(anyString(), anyString(), anyString())).thenReturn(new CompletableFuture<>());
+
+        long start = System.nanoTime();
+        assertThat(relay.publishPending()).isZero();
+        Duration took = Duration.ofNanos(System.nanoTime() - start);
+
+        assertThat(took).isBetween(SEND_TIMEOUT, SEND_TIMEOUT.plus(OutboxRelay.SEND_GRACE).plusSeconds(1));
+        verify(repository, never()).markPublished(anyLong(), any());
+        verify(kafka, never()).send("t.v1", "key", "{\"n\":2}");
     }
 
     @Test
