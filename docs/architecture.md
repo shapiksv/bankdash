@@ -196,6 +196,8 @@ bankdash/
 
 ## 5. Implementation order (something runs after every step)
 
+> **Superseded for new work.** Steps 1–3 were built from this section. From now on, work is specified as tickets in `specs/` (Spec-Driven Development, see `CLAUDE.md`); the remaining steps below are the backlog the tickets are cut from. Sections 1–4 and 6–7 remain the high-level architecture.
+
 **Testing applies to every step:**
 - **Unit tests** cover domain and application logic: JUnit 5, AssertJ, Mockito.
 - **Testcontainers integration tests** run against real Postgres and Kafka, via `@SpringBootTest` and `libs/test-support`. They cover the REST API, Flyway migrations, outbox publishing and Kafka consumers, including the DLT path where relevant.

@@ -1,6 +1,6 @@
 # BankDash
 
-Learning project: a banking dashboard with a Java 25 / Spring Boot 4.1 microservices backend and a React + TypeScript frontend in one monorepo. Read `docs/architecture.md` before larger changes: it defines the services, events and the step-by-step implementation plan (§5). Implement one step at a time.
+Learning project: a banking dashboard with a Java 25 / Spring Boot 4.1 microservices backend and a React + TypeScript frontend in one monorepo. Read `docs/architecture.md` before larger changes: it defines the services, boundaries and events. New work is specified per ticket in `specs/` (see Spec-Driven Development below).
 
 ## Commands
 
@@ -30,7 +30,19 @@ cd apps/web && npm test                  # Vitest, single run (npm run test:watc
 cd apps/web && npm run build && npm run lint
 ```
 
-Claude Code: `/step N` implements step N of `docs/architecture.md` §5 (branch → plan → wait for "approved" → commits → checks + smoke test → draft PR). Defined in `.claude/skills/step/SKILL.md`.
+Claude Code: the `/spec-*` skills below drive new work. `/step N` (`.claude/skills/step/SKILL.md`) is the legacy workflow for the §5 steps of `docs/architecture.md`.
+
+## Spec-Driven Development
+
+The spec is the source of truth; code and tests must trace back to it. Each ticket gets a folder `specs/<TICKET-ID>-<short-name>/` (e.g. `specs/BANK-4-cards/`) holding `spec.md`, copied from `specs/_template/spec.md`, with numbered acceptance criteria AC1..ACn in Given/When/Then form. Tickets replace the §5 steps of `docs/architecture.md`, which stays the high-level architecture.
+
+Workflow (each skill is user-invoked and takes the spec folder, e.g. `/spec-review specs/BANK-4-cards`):
+
+1. **Write** `spec.md` from the template.
+2. **`/spec-review`**: read-only; reports ambiguities, contradictions, missing or untestable ACs and conflicts with the architecture as numbered questions. Answer them in the spec.
+3. **`/spec-plan`**: writes `plan.md` (design decisions with reasoning, files, endpoints, events, migrations) and `tasks.md` (small ordered tasks, each listing the ACs it covers), then stops until the plan is approved.
+4. **`/spec-implement`**: branch named after the folder, one small commit per task, test names reference AC ids (`ac3_rejectsForeignAccount`, `it('AC3: ...')`), then all checks and a smoke test through the gateway. If the spec is wrong or incomplete it stops and asks; the spec is updated first, never silently bypassed.
+5. **`/spec-verify`**: traceability table AC → test(s) → status → evidence, flags untested ACs, pushes and opens a draft PR with the table.
 
 ## Local infrastructure
 
@@ -63,6 +75,7 @@ services/           one Gradle project per microservice
 apps/web/           React + TS + Vite frontend (api/, auth/, profile/, layout/, pages/, routes.tsx); TanStack Query;
                     Vite proxies /api to :8080
 infra/              postgres/init.sql; kafka/topics.txt + create-topics.sh
+specs/              one folder per ticket (spec.md, plan.md, tasks.md); _template/spec.md
 docs/               ui-analysis.md, architecture.md, adr/ (0001: JWT and refresh tokens)
 docker-compose.yml  infra only: postgres, kafka, kafka-ui
 ```
@@ -93,4 +106,4 @@ Any folder under `libs/` or `services/` with a `build.gradle.kts` is included au
 - Services that only validate tokens test against `TestJwtIssuer` (see `GatewayIT`, `ProfileIT`) instead of running auth-service. Business services get their security setup from `libs/web-common`.
 - Tests and `bootRun` run in UTC (Postgres rejects some deprecated host zones such as `Europe/Kiev`).
 - Java packages: `com.bankdash.<svc>.{api,domain,app,infra}`.
-- Small, focused commits; one branch and PR per implementation step.
+- Small, focused commits; one branch and PR per ticket (spec folder).
