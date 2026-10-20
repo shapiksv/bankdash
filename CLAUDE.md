@@ -30,8 +30,6 @@ cd apps/web && npm test                  # Vitest, single run (npm run test:watc
 cd apps/web && npm run build && npm run lint
 ```
 
-Claude Code: the `/spec-*` skills below drive new work. `/step N` (`.claude/skills/step/SKILL.md`) is the legacy workflow for the §5 steps of `docs/architecture.md`.
-
 ## Spec-Driven Development
 
 The spec is the source of truth; code and tests must trace back to it. Each ticket gets a folder `specs/<TICKET-ID>-<short-name>/` (e.g. `specs/BANK-4-cards/`) holding `spec.md`, copied from `specs/_template/spec.md`, with numbered acceptance criteria AC1..ACn in Given/When/Then form. Tickets replace the §5 steps of `docs/architecture.md`, which stays the high-level architecture.
