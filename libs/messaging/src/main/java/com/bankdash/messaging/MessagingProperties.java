@@ -19,6 +19,8 @@ public record MessagingProperties(@DefaultValue Outbox outbox, @DefaultValue Con
      * @param batchSize    rows sent per relay run
      * @param sendTimeout  how long one record may take, from waiting for topic metadata to the broker's ack;
      *                     the relay's producer gives the record up after that
+     * @param maxAttempts  failed sends after which a row becomes {@code FAILED} and holds back later rows with its
+     *                     key (see {@link com.bankdash.messaging.OutboxRelay})
      * @param retention    how long published rows are kept before they are deleted
      */
     public record Outbox(
@@ -26,6 +28,7 @@ public record MessagingProperties(@DefaultValue Outbox outbox, @DefaultValue Con
             @DefaultValue("500ms") Duration pollInterval,
             @DefaultValue("100") int batchSize,
             @DefaultValue("10s") Duration sendTimeout,
+            @DefaultValue("10") int maxAttempts,
             @DefaultValue("7d") Duration retention) {}
 
     /**

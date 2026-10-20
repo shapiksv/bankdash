@@ -88,7 +88,7 @@ Each frontend widget calls one endpoint, and the page fires these calls in paral
 - **Envelope:** `eventId`, `eventType`, `occurredAt`, `payload`.
 - **Format:** JSON. Topics carry a `.v1` suffix.
 - **Message key:** the one shown below, so events for the same key stay in order.
-- **Sending:** through a **transactional outbox**.
+- **Sending:** through a **transactional outbox**. A row that still fails after `bankdash.messaging.outbox.max-attempts` sends becomes `FAILED` (logged at ERROR) and holds back later rows with the same key until someone sets it back to `PENDING`; rows with other keys keep flowing.
 - **Receiving:** consumers are **idempotent** (they keep a `processed_event` table).
 
 | Topic | Producer | Key | Payload | Consumers → effect |

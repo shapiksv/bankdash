@@ -162,6 +162,12 @@ class OutboxIT {
             assertThat(publishedNames()).containsExactly("Jane 0");
             List<String> sent = new ArrayList<>(sentNames());
             assertThat(sent).containsExactly("Jane 0");
+            var failedOnce = jdbc.sql("""
+                            SELECT status, attempts, last_error FROM outbox_event
+                            WHERE message_key = ? AND payload->'payload'->>'fullName' = 'Jane 1'""")
+                    .param(key).query().singleRow();
+            assertThat(failedOnce).containsEntry("status", "PENDING").containsEntry("attempts", 1);
+            assertThat((String) failedOnce.get("last_error")).contains("Broker unavailable");
 
             relay.publishPending();
 
@@ -196,6 +202,40 @@ class OutboxIT {
         return topic.readFor(Duration.ofSeconds(1), r -> key.equals(r.key())).stream()
                 .map(r -> r.value().replaceAll(".*\"fullName\":\"([^\"]+)\".*", "$1"))
                 .toList();
+    }
+
+    /** Auto topic creation is off, so every send to the topic times out (send-timeout and max-attempts: 2s, 3). */
+    @Test
+    void aRowForAMissingTopicFailsAfterMaxAttemptsAndHoldsBackOnlyLaterRowsWithItsKey() {
+        String otherKey = UUID.randomUUID().toString();
+        var lost = transactions.execute(status ->
+                outbox.publish("no-such-topic.v1", key, UserRegistered.TYPE, payload()));
+        var heldBack = transactions.execute(status -> outbox.publish(TOPIC, key, UserRegistered.TYPE, payload()));
+        var flowing = transactions.execute(status -> outbox.publish(TOPIC, otherKey, UserRegistered.TYPE,
+                new UserRegistered(UUID.fromString(otherKey), "john@example.com", "John Doe")));
+
+        Awaitility.await().atMost(Duration.ofSeconds(30)).until(() -> "FAILED".equals(status(lost.eventId())));
+        var failed = jdbc.sql("SELECT attempts, last_error FROM outbox_event WHERE event_id = ?")
+                .param(lost.eventId()).query().singleRow();
+        assertThat(failed).containsEntry("attempts", properties.outbox().maxAttempts());
+        assertThat((String) failed.get("last_error")).contains("no-such-topic.v1");
+
+        assertThat(topic.awaitOne(Duration.ofSeconds(10), r -> otherKey.equals(r.key()))).isNotNull();
+        Awaitility.await().atMost(Duration.ofSeconds(5)).until(() -> "PUBLISHED".equals(status(flowing.eventId())));
+        // Written after the row failed, so a later run reads it past the FAILED row.
+        var flowingLater = transactions.execute(status -> outbox.publish(TOPIC, otherKey, UserRegistered.TYPE,
+                new UserRegistered(UUID.fromString(otherKey), "john@example.com", "John Doe")));
+        Awaitility.await().atMost(Duration.ofSeconds(5))
+                .until(() -> "PUBLISHED".equals(status(flowingLater.eventId())));
+        assertThat(topic.readFor(Duration.ofMillis(1500), r -> key.equals(r.key()))).isEmpty();
+        assertThat(status(heldBack.eventId())).isEqualTo("PENDING");
+        assertThat(jdbc.sql("SELECT attempts FROM outbox_event WHERE event_id = ?").param(heldBack.eventId())
+                .query(Integer.class).single()).isZero();
+    }
+
+    String status(UUID eventId) {
+        return jdbc.sql("SELECT status FROM outbox_event WHERE event_id = ?").param(eventId)
+                .query(String.class).single();
     }
 
     @Test

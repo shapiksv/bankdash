@@ -26,27 +26,41 @@ class JdbcOutboxRepository implements OutboxRepository {
     @Override
     public List<PendingRow> lockPending(int limit) {
         return jdbc.sql("""
-                        SELECT id, event_id, topic, message_key, payload::text AS payload
-                        FROM outbox_event
-                        WHERE published_at IS NULL
+                        SELECT id, event_id, topic, message_key, payload::text AS payload, attempts
+                        FROM outbox_event e
+                        WHERE status = 'PENDING'
+                          AND NOT EXISTS (SELECT 1 FROM outbox_event f
+                                          WHERE f.status = 'FAILED' AND f.message_key = e.message_key)
                         ORDER BY id
                         LIMIT ?
                         FOR UPDATE SKIP LOCKED""")
                 .param(limit)
                 .query((rs, n) -> new PendingRow(rs.getLong("id"), rs.getObject("event_id", UUID.class),
-                        rs.getString("topic"), rs.getString("message_key"), rs.getString("payload")))
+                        rs.getString("topic"), rs.getString("message_key"), rs.getString("payload"),
+                        rs.getInt("attempts")))
                 .list();
     }
 
     @Override
     public void markPublished(long id, Instant publishedAt) {
-        jdbc.sql("UPDATE outbox_event SET published_at = ? WHERE id = ?")
+        jdbc.sql("UPDATE outbox_event SET status = 'PUBLISHED', published_at = ? WHERE id = ?")
                 .params(Timestamp.from(publishedAt), id)
                 .update();
     }
 
     @Override
+    public void recordFailure(long id, String error, boolean failed) {
+        jdbc.sql("""
+                        UPDATE outbox_event SET attempts = attempts + 1, last_error = ?, status = ?
+                        WHERE id = ?""")
+                .params(error, failed ? "FAILED" : "PENDING", id)
+                .update();
+    }
+
+    @Override
     public int deletePublishedBefore(Instant cutoff) {
-        return jdbc.sql("DELETE FROM outbox_event WHERE published_at < ?").param(Timestamp.from(cutoff)).update();
+        return jdbc.sql("DELETE FROM outbox_event WHERE status = 'PUBLISHED' AND published_at < ?")
+                .param(Timestamp.from(cutoff))
+                .update();
     }
 }
