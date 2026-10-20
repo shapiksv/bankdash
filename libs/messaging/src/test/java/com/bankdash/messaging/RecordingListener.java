@@ -39,7 +39,7 @@ class RecordingListener {
     @KafkaListener(topics = Topics.AUTH_USER_REGISTERED, groupId = "messaging-it")
     void on(ReceivedEvent event) {
         deliveries.computeIfAbsent(event.eventId(), id -> new AtomicInteger()).incrementAndGet();
-        UserRegistered payload = payloads.read(event, UserRegistered.class);
+        UserRegistered payload = payloads.read(event, UserRegistered.TYPE, UserRegistered.class);
         idempotentConsumer.process(CONSUMER, event.eventId(), () -> {
             switch (payload.fullName()) {
                 case "always-fails" -> throw new IllegalStateException("Database unavailable");

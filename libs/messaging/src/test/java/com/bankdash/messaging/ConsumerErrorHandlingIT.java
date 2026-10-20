@@ -154,6 +154,21 @@ class ConsumerErrorHandlingIT {
         assertThat(listener.deliveries(eventId)).isOne();
     }
 
+    /** The payload maps onto UserRegistered, so only the eventType check keeps it from being handled. */
+    @Test
+    void anEventOfAnotherTypeGoesToTheDltWithoutRetriesAndIsNotHandled() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe").replace("\"eventType\":\"UserRegistered\"", "\"eventType\":\"UserDeleted\""));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(InvalidEventException.class.getName());
+        assertThat(header(dead, "kafka_dlt-exception-message")).contains("UserDeleted", "expected UserRegistered");
+        assertThat(listener.deliveries(eventId)).isOne();
+        assertThat(listener.handled).doesNotContain(eventId);
+        assertThat(processedRows(eventId)).isZero();
+    }
+
     @Test
     void aNonRetryableErrorGoesToTheDltAfterOneAttempt() throws Exception {
         UUID eventId = UUID.randomUUID();

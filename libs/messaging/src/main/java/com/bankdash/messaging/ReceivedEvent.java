@@ -13,7 +13,7 @@ import tools.jackson.databind.JsonNode;
  * <pre>{@code
  * @KafkaListener(topics = Topics.AUTH_USER_REGISTERED)
  * void on(ReceivedEvent event) {
- *     UserRegistered payload = payloads.read(event, UserRegistered.class);
+ *     UserRegistered payload = payloads.read(event, UserRegistered.TYPE, UserRegistered.class);
  *     idempotentConsumer.process("profile.user-registered", event.eventId(), () -> ...);
  * }
  * }</pre>

@@ -30,7 +30,7 @@ class UserRegisteredListener {
 
     @KafkaListener(topics = Topics.AUTH_USER_REGISTERED)
     void on(ReceivedEvent event) {
-        UserRegistered payload = payloads.read(event, UserRegistered.class);
+        UserRegistered payload = payloads.read(event, UserRegistered.TYPE, UserRegistered.class);
         idempotentConsumer.process(CONSUMER, event.eventId(), () -> profiles.createFromRegistration(payload));
     }
 }
