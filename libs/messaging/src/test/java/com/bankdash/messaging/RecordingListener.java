@@ -21,7 +21,8 @@ class RecordingListener {
 
     static final String CONSUMER = "messaging-it.user-registered";
 
-    final Map<UUID, AtomicInteger> attempts = new ConcurrentHashMap<>();
+    /** Every delivery of an event to {@link #on}, counted before anything can fail. */
+    final Map<UUID, AtomicInteger> deliveries = new ConcurrentHashMap<>();
     final List<UUID> handled = new CopyOnWriteArrayList<>();
 
     private final EventPayloads payloads;
@@ -34,8 +35,8 @@ class RecordingListener {
 
     @KafkaListener(topics = Topics.AUTH_USER_REGISTERED, groupId = "messaging-it")
     void on(ReceivedEvent event) {
+        deliveries.computeIfAbsent(event.eventId(), id -> new AtomicInteger()).incrementAndGet();
         UserRegistered payload = payloads.read(event, UserRegistered.class);
-        attempts.computeIfAbsent(event.eventId(), id -> new AtomicInteger()).incrementAndGet();
         switch (payload.fullName()) {
             case "always-fails" -> throw new IllegalStateException("Database unavailable");
             case "illegal-argument" -> throw new IllegalArgumentException("Cannot handle this user");
@@ -43,8 +44,8 @@ class RecordingListener {
         }
     }
 
-    int attempts(UUID eventId) {
-        AtomicInteger count = attempts.get(eventId);
+    int deliveries(UUID eventId) {
+        AtomicInteger count = deliveries.get(eventId);
         return count == null ? 0 : count.get();
     }
 }

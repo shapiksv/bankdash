@@ -92,7 +92,7 @@ class ConsumerErrorHandlingIT {
 
         // Same key, same partition: once the marker is handled, both copies were seen.
         Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(marker));
-        assertThat(listener.attempts(eventId)).isEqualTo(2);
+        assertThat(listener.deliveries(eventId)).isEqualTo(2);
         assertThat(listener.handled).containsOnlyOnce(eventId);
         assertThat(jdbc.sql("SELECT count(*) FROM processed_event WHERE event_id = ?").param(eventId)
                 .query(Long.class).single()).isOne();
@@ -113,6 +113,10 @@ class ConsumerErrorHandlingIT {
         Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(next));
     }
 
+    /**
+     * A deserialization failure never reaches the listener, so there are no deliveries to count; the
+     * DefaultErrorHandler classifies DeserializationException as not retryable by default.
+     */
     @Test
     void anEnvelopeWithoutItsIdGoesToTheDlt() throws Exception {
         send("""
@@ -135,7 +139,7 @@ class ConsumerErrorHandlingIT {
         assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(InvalidEventException.class.getName());
         assertThat(header(dead, "kafka_dlt-exception-message")).contains("fullName", "userId");
         assertThat(dead.value()).contains(eventId.toString());
-        assertThat(listener.attempts(eventId)).isZero();
+        assertThat(listener.deliveries(eventId)).isOne();
     }
 
     @Test
@@ -146,7 +150,7 @@ class ConsumerErrorHandlingIT {
 
         var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
         assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(IllegalArgumentException.class.getName());
-        assertThat(listener.attempts(eventId)).isOne();
+        assertThat(listener.deliveries(eventId)).isOne();
     }
 
     @Test
@@ -157,7 +161,7 @@ class ConsumerErrorHandlingIT {
 
         var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
         assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(IllegalStateException.class.getName());
-        assertThat(listener.attempts(eventId)).isEqualTo(4);
+        assertThat(listener.deliveries(eventId)).isEqualTo(4);
         assertThat(dead.value()).contains(eventId.toString(), "always-fails");
     }
 }
