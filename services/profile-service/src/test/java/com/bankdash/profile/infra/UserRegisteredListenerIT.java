@@ -1,18 +1,26 @@
 package com.bankdash.profile.infra;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import com.bankdash.events.Topics;
 import com.bankdash.profile.ProfileIT;
+import com.bankdash.profile.domain.Preferences;
 import com.bankdash.testsupport.TopicReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.kafka.core.KafkaAdmin;
 
 class UserRegisteredListenerIT extends ProfileIT {
@@ -54,6 +62,44 @@ class UserRegisteredListenerIT extends ProfileIT {
     }
 
     @Test
+    void aFailureInsideTheTransactionRollsEverythingBackAndTheRetryCreatesTheProfile() throws Exception {
+        UUID userId = UUID.randomUUID();
+        CountDownLatch retryStarted = new CountDownLatch(1);
+        CountDownLatch checked = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            throw new TransientDataAccessResourceException("Connection reset");
+        }).doAnswer(invocation -> {
+            // Hold the retry open while the test looks at what the first attempt left behind.
+            retryStarted.countDown();
+            checked.await(WAIT.toSeconds(), TimeUnit.SECONDS);
+            return invocation.callRealMethod();
+        }).when(preferencesRepository).insertIfAbsent(forUser(userId));
+
+        var event = register(userId, "user-" + userId + "@example.com", "Jane Doe");
+
+        assertThat(retryStarted.await(WAIT.toSeconds(), TimeUnit.SECONDS)).isTrue();
+        // The first attempt had inserted both rows before it failed; they were rolled back.
+        assertThat(hasProfile(userId)).isFalse();
+        assertThat(processedRows(event.eventId())).isZero();
+        checked.countDown();
+
+        Awaitility.await().atMost(WAIT).until(() -> hasProfile(userId));
+        assertThat(jdbc.sql("SELECT count(*) FROM preferences WHERE user_id = ?").param(userId)
+                .query(Long.class).single()).isOne();
+        assertThat(processedRows(event.eventId())).isOne();
+        verify(preferencesRepository, times(2)).insertIfAbsent(forUser(userId));
+    }
+
+    static Preferences forUser(UUID userId) {
+        return argThat(p -> p != null && userId.equals(p.userId()));
+    }
+
+    long processedRows(UUID eventId) {
+        return jdbc.sql("SELECT count(*) FROM processed_event WHERE event_id = ?").param(eventId)
+                .query(Long.class).single();
+    }
+
+    @Test
     void aDuplicateEventIsIgnoredAndDoesNotUndoEdits() {
         UUID userId = UUID.randomUUID();
         var event = register(userId, "user-" + userId + "@example.com", "Jane Doe");
@@ -66,8 +112,7 @@ class UserRegisteredListenerIT extends ProfileIT {
         Awaitility.await().atMost(WAIT).until(() -> hasProfile(marker));
 
         assertThat(profileRow(userId)).containsEntry("full_name", "Jane Edited");
-        assertThat(jdbc.sql("SELECT count(*) FROM processed_event WHERE event_id = ?").param(event.eventId())
-                .query(Long.class).single()).isOne();
+        assertThat(processedRows(event.eventId())).isOne();
     }
 
     @Test

@@ -94,8 +94,20 @@ class ConsumerErrorHandlingIT {
         Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(marker));
         assertThat(listener.deliveries(eventId)).isEqualTo(2);
         assertThat(listener.handled).containsOnlyOnce(eventId);
-        assertThat(jdbc.sql("SELECT count(*) FROM processed_event WHERE event_id = ?").param(eventId)
-                .query(Long.class).single()).isOne();
+        assertThat(processedRows(eventId)).isOne();
+    }
+
+    @Test
+    void aHandlerFailingInsideTheTransactionLeavesTheEventUnprocessedAndTheRetryHandlesIt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "fails-once"));
+
+        // Had the first attempt's processed_event row survived its rollback, the retry would skip the handler.
+        Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(eventId));
+        assertThat(listener.deliveries(eventId)).isEqualTo(2);
+        assertThat(listener.handled).containsOnlyOnce(eventId);
+        assertThat(processedRows(eventId)).isOne();
     }
 
     @Test
@@ -151,6 +163,7 @@ class ConsumerErrorHandlingIT {
         var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
         assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(IllegalArgumentException.class.getName());
         assertThat(listener.deliveries(eventId)).isOne();
+        assertThat(processedRows(eventId)).isZero();
     }
 
     @Test
@@ -163,5 +176,11 @@ class ConsumerErrorHandlingIT {
         assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(IllegalStateException.class.getName());
         assertThat(listener.deliveries(eventId)).isEqualTo(4);
         assertThat(dead.value()).contains(eventId.toString(), "always-fails");
+        assertThat(processedRows(eventId)).isZero();
+    }
+
+    long processedRows(UUID eventId) {
+        return jdbc.sql("SELECT count(*) FROM processed_event WHERE event_id = ?").param(eventId)
+                .query(Long.class).single();
     }
 }
