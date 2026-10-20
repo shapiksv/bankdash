@@ -13,4 +13,7 @@ public interface RefreshTokenRepository {
     void markReplaced(UUID id, UUID replacedBy);
 
     void revokeFamily(UUID familyId);
+
+    /** Ends every login of the user, e.g. after a password change. */
+    void revokeAllForUser(UUID userId);
 }

@@ -4,6 +4,7 @@ server:
 bankdash:
   services:
     auth: ${AUTH_SERVICE_URL:http://localhost:8081}
+    profile: ${PROFILE_SERVICE_URL:http://localhost:8082}
   cors:
     # The Vite dev server. Not needed when the browser goes through Vite's /api proxy (same origin),
     # only when a page on this origin calls the gateway directly.
@@ -33,6 +34,13 @@ spring:
               uri: ${bankdash.services.auth}
               predicates:
                 - Path=/api/auth/**
+              filters:
+                - StripPrefix=1
+            - id: profile-service
+              uri: ${bankdash.services.profile}
+              predicates:
+                # /** also matches the bare path, e.g. /api/preferences.
+                - Path=/api/profile/**,/api/preferences/**
               filters:
                 - StripPrefix=1
 

@@ -1,0 +1,229 @@
+package com.bankdash.messaging;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.bankdash.events.Topics;
+import com.bankdash.testsupport.ContainersConfig;
+import com.bankdash.testsupport.TopicReader;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.UUID;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.kafka.core.KafkaAdmin;
+import org.springframework.kafka.core.KafkaTemplate;
+
+/**
+ * The DefaultErrorHandler setup: idempotent processing, retries for transient errors, and the DLT for records
+ * that can never succeed.
+ */
+@SpringBootTest
+@Import(ContainersConfig.class)
+class ConsumerErrorHandlingIT {
+
+    static final String TOPIC = Topics.AUTH_USER_REGISTERED;
+    static final Duration WAIT = Duration.ofSeconds(15);
+
+    @Autowired
+    KafkaTemplate<Object, Object> kafka;
+
+    @Autowired
+    KafkaAdmin kafkaAdmin;
+
+    @Autowired
+    RecordingListener listener;
+
+    @Autowired
+    JdbcClient jdbc;
+
+    TopicReader dlt;
+    final String key = UUID.randomUUID().toString();
+
+    @BeforeEach
+    void subscribe() {
+        dlt = new TopicReader(kafkaAdmin.getConfigurationProperties(), Topics.dlt(TOPIC));
+    }
+
+    @AfterEach
+    void close() {
+        dlt.close();
+    }
+
+    static String envelope(UUID eventId, String fullName) {
+        return """
+                {"eventId":"%s","eventType":"UserRegistered","schemaVersion":1,"source":"auth-service",\
+                "occurredAt":"2026-10-13T10:00:00Z",\
+                "payload":{"userId":"%s","email":"jane@example.com","fullName":"%s"}}"""
+                .formatted(eventId, UUID.randomUUID(), fullName);
+    }
+
+    void send(String value) throws Exception {
+        kafka.send(TOPIC, key, value).get();
+    }
+
+    static String header(ConsumerRecord<String, String> record, String name) {
+        var header = record.headers().lastHeader(name);
+        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void aValidEventIsHandledOnce() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe"));
+
+        Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(eventId));
+    }
+
+    @Test
+    void aRedeliveredEventIsSkipped() throws Exception {
+        UUID eventId = UUID.randomUUID();
+        UUID marker = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe"));
+        send(envelope(eventId, "Jane Doe"));
+        send(envelope(marker, "Jane Doe"));
+
+        // Same key, same partition: once the marker is handled, both copies were seen.
+        Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(marker));
+        assertThat(listener.deliveries(eventId)).isEqualTo(2);
+        assertThat(listener.handled).containsOnlyOnce(eventId);
+        assertThat(processedRows(eventId)).isOne();
+    }
+
+    @Test
+    void aHandlerFailingInsideTheTransactionLeavesTheEventUnprocessedAndTheRetryHandlesIt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "fails-once"));
+
+        // Had the first attempt's processed_event row survived its rollback, the retry would skip the handler.
+        Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(eventId));
+        assertThat(listener.deliveries(eventId)).isEqualTo(2);
+        assertThat(listener.handled).containsOnlyOnce(eventId);
+        assertThat(processedRows(eventId)).isOne();
+    }
+
+    @Test
+    void notJsonGoesToTheDltUntouchedAndTheNextRecordStillGetsThrough() throws Exception {
+        UUID next = UUID.randomUUID();
+
+        send("not-json");
+        send(envelope(next, "Jane Doe"));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(dead.value()).isEqualTo("not-json");
+        assertThat(header(dead, "kafka_dlt-original-topic")).isEqualTo(TOPIC);
+        assertThat(header(dead, "kafka_dlt-exception-fqcn"))
+                .isEqualTo("org.springframework.kafka.support.serializer.DeserializationException");
+        Awaitility.await().atMost(WAIT).until(() -> listener.handled.contains(next));
+    }
+
+    /**
+     * A deserialization failure never reaches the listener, so there are no deliveries to count; the
+     * DefaultErrorHandler classifies DeserializationException as not retryable by default.
+     */
+    @Test
+    void anEnvelopeWithoutItsIdGoesToTheDlt() throws Exception {
+        send("""
+                {"eventType":"UserRegistered","schemaVersion":1,"source":"auth-service",\
+                "occurredAt":"2026-10-13T10:00:00Z","payload":{}}""");
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-fqcn"))
+                .isEqualTo("org.springframework.kafka.support.serializer.DeserializationException");
+    }
+
+    /** Rejected by the deserializer's validation, so the listener never sees it. */
+    @Test
+    void anEnvelopeWithoutItsSourceGoesToTheDlt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe").replace("\"source\":\"auth-service\",", ""));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-fqcn"))
+                .isEqualTo("org.springframework.kafka.support.serializer.DeserializationException");
+        assertThat(listener.deliveries(eventId)).isZero();
+    }
+
+    /** Rejected by the deserializer's validation, so the listener never sees it. */
+    @Test
+    void anEnvelopeWithoutItsSchemaVersionGoesToTheDlt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe").replace("\"schemaVersion\":1,", ""));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-fqcn"))
+                .isEqualTo("org.springframework.kafka.support.serializer.DeserializationException");
+        assertThat(listener.deliveries(eventId)).isZero();
+    }
+
+    @Test
+    void anInvalidPayloadGoesToTheDltWithoutRetries() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send("""
+                {"eventId":"%s","eventType":"UserRegistered","schemaVersion":1,"source":"auth-service",\
+                "occurredAt":"2026-10-13T10:00:00Z","payload":{"email":"jane@example.com"}}""".formatted(eventId));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(InvalidEventException.class.getName());
+        assertThat(header(dead, "kafka_dlt-exception-message")).contains("fullName", "userId");
+        assertThat(dead.value()).contains(eventId.toString());
+        assertThat(listener.deliveries(eventId)).isOne();
+    }
+
+    /** The payload maps onto UserRegistered, so only the eventType check keeps it from being handled. */
+    @Test
+    void anEventOfAnotherTypeGoesToTheDltWithoutRetriesAndIsNotHandled() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "Jane Doe").replace("\"eventType\":\"UserRegistered\"", "\"eventType\":\"UserDeleted\""));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(InvalidEventException.class.getName());
+        assertThat(header(dead, "kafka_dlt-exception-message")).contains("UserDeleted", "expected UserRegistered");
+        assertThat(listener.deliveries(eventId)).isOne();
+        assertThat(listener.handled).doesNotContain(eventId);
+        assertThat(processedRows(eventId)).isZero();
+    }
+
+    @Test
+    void aNonRetryableErrorGoesToTheDltAfterOneAttempt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "illegal-argument"));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(IllegalArgumentException.class.getName());
+        assertThat(listener.deliveries(eventId)).isOne();
+        assertThat(processedRows(eventId)).isZero();
+    }
+
+    @Test
+    void aTransientErrorIsRetriedThreeTimesThenGoesToTheDlt() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        send(envelope(eventId, "always-fails"));
+
+        var dead = dlt.awaitOne(WAIT, r -> key.equals(r.key()));
+        assertThat(header(dead, "kafka_dlt-exception-cause-fqcn")).isEqualTo(IllegalStateException.class.getName());
+        assertThat(listener.deliveries(eventId)).isEqualTo(4);
+        assertThat(dead.value()).contains(eventId.toString(), "always-fails");
+        assertThat(processedRows(eventId)).isZero();
+    }
+
+    long processedRows(UUID eventId) {
+        return jdbc.sql("SELECT count(*) FROM processed_event WHERE event_id = ?").param(eventId)
+                .query(Long.class).single();
+    }
+}

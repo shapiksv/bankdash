@@ -3,6 +3,7 @@ import { apiFetch, setAccessToken, type TokenResponse } from './client'
 export interface CurrentUser {
   id: string
   email: string
+  twoFactorEnabled: boolean
 }
 
 export interface SignupInput {
@@ -40,4 +41,21 @@ export async function logout(): Promise<void> {
 
 export function fetchCurrentUser(): Promise<CurrentUser> {
   return apiFetch<CurrentUser>('/auth/me')
+}
+
+/** Ends every other login; the response is a new session for this tab, like login. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const tokens = await apiFetch<TokenResponse>('/auth/password', {
+    method: 'PUT',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  })
+  setAccessToken(tokens.accessToken)
+}
+
+export async function setTwoFactor(enabled: boolean): Promise<boolean> {
+  const response = await apiFetch<{ twoFactorEnabled: boolean }>('/auth/two-factor', {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  })
+  return response.twoFactorEnabled
 }

@@ -86,6 +86,19 @@ class SignupLoginIT {
     }
 
     @Test
+    void validationMessagesAreEnglishWhateverTheBrowserLanguage() {
+        var response = mvc.post().uri("/auth/signup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Accept-Language", "de, uk;q=0.8")
+                .content("""
+                        {"fullName": "", "email": "not-an-email", "password": "secret123"}""")
+                .exchange();
+
+        assertThat(response).bodyJson().extractingPath("$.errors[*].message").asArray()
+                .containsExactlyInAnyOrder("must not be blank", "must be a well-formed email address");
+    }
+
+    @Test
     void shortPasswordIs400() {
         var response = signup(email, "short");
 

@@ -11,21 +11,33 @@ public final class PasswordPolicy {
     private PasswordPolicy() {}
 
     public static void check(String password) {
+        check("password", password);
+    }
+
+    /** @param field the request field the password came from, for the error response */
+    public static void check(String field, String password) {
         if (password.codePointCount(0, password.length()) < MIN_LENGTH) {
-            throw new InvalidPasswordException("Password must be at least " + MIN_LENGTH + " characters long");
+            throw new InvalidPasswordException(field, "Password must be at least " + MIN_LENGTH + " characters long");
         }
         if (password.getBytes(StandardCharsets.UTF_8).length > MAX_BYTES) {
-            throw new InvalidPasswordException("Password must be at most " + MAX_BYTES + " bytes long");
+            throw new InvalidPasswordException(field, "Password must be at most " + MAX_BYTES + " bytes long");
         }
         if (password.isBlank()) {
-            throw new InvalidPasswordException("Password must not be blank");
+            throw new InvalidPasswordException(field, "Password must not be blank");
         }
     }
 
     public static class InvalidPasswordException extends RuntimeException {
 
-        public InvalidPasswordException(String message) {
+        private final String field;
+
+        public InvalidPasswordException(String field, String message) {
             super(message);
+            this.field = field;
+        }
+
+        public String field() {
+            return field;
         }
     }
 }

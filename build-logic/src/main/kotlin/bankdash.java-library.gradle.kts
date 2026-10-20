@@ -43,6 +43,8 @@ tasks.withType<Test>().configureEach {
     // Deterministic time zone. The PostgreSQL driver sends the JVM zone on connect, and Postgres
     // rejects deprecated aliases such as Europe/Kiev that some hosts still use.
     systemProperty("user.timezone", "UTC")
+    // libs/test-support reads infra/kafka/topics.txt from here to create the topics in the test broker.
+    systemProperty("bankdash.repo-root", rootDir.absolutePath)
     testLogging {
         events("passed", "skipped", "failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

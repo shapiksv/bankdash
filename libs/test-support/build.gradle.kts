@@ -13,6 +13,8 @@ dependencies {
     testFixturesApi(libs.testcontainers.kafka)
     testFixturesApi(libs.nimbus.jose.jwt)
     testFixturesImplementation(libs.spring.boot.starter.test)
+    // Provided by the services that use Kafka; only used when it is on the classpath.
+    testFixturesCompileOnly(libs.kafka.clients)
 
     // Only for the smoke test that proves the containers work with Spring Boot.
     testImplementation(libs.spring.boot.starter.jdbc)

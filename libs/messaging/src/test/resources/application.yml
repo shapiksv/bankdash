@@ -1,0 +1,19 @@
+spring:
+  application:
+    # The outbox's envelope source.
+    name: messaging-it
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+
+bankdash:
+  messaging:
+    outbox:
+      enabled: true
+      poll-interval: 100ms
+      # Keeps the FAILED tests fast (a missing topic times out once per attempt); the defaults are 10s and 10.
+      send-timeout: 2s
+      max-attempts: 3
+    consumer:
+      # Keeps the retry tests fast; the default is 1s.
+      retry-interval: 100ms

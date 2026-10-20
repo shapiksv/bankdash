@@ -28,6 +28,7 @@ export function FakeAuth({
         await spies.logout()
         setState({ status: 'anonymous' })
       },
+      reloadUser: spies.reloadUser,
     }),
     [state, spies],
   )

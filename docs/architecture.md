@@ -85,10 +85,10 @@ Each frontend widget calls one endpoint, and the page fires these calls in paral
 - **Service-to-service:** the only synchronous call is gateway/services fetching JWKS from auth-service, which is cached. No business service calls another business service synchronously. This is intentional: it keeps services independent.
 
 **Asynchronous (Kafka).** Every event shares these rules:
-- **Envelope:** `eventId`, `eventType`, `occurredAt`, `payload`.
-- **Format:** JSON. Topics carry a `.v1` suffix.
+- **Envelope:** `eventId`, `eventType`, `schemaVersion`, `source`, `occurredAt`, `payload` (`EventEnvelope` in `libs/events`). `source` is the producing service (`spring.application.name`). `schemaVersion` is the payload's version, starting at 1; it goes up with a compatible change, such as a new optional field. Consumers reject an envelope without either field (DLT).
+- **Format:** JSON. Topics carry a `.v1` suffix, which changes only with an incompatible payload change.
 - **Message key:** the one shown below, so events for the same key stay in order.
-- **Sending:** through a **transactional outbox**.
+- **Sending:** through a **transactional outbox**. A row that still fails after `bankdash.messaging.outbox.max-attempts` sends becomes `FAILED` (logged at ERROR) and holds back later rows with the same key until someone sets it back to `PENDING`; rows with other keys keep flowing.
 - **Receiving:** consumers are **idempotent** (they keep a `processed_event` table).
 
 | Topic | Producer | Key | Payload | Consumers → effect |
@@ -312,7 +312,11 @@ Things we know are missing and intend to fix, unlike the deliberate simplificati
 
 | Item | Since | Risk | Plan |
 |---|---|---|---|
-| **No rate limiting on `/api/auth/*`** (signup, login, refresh, logout). §1 lists it as a gateway responsibility, but step 2 shipped without it. | Step 2 | Online password guessing and signup spam are limited only by BCrypt's cost. | Per-IP and per-email limits at the gateway (e.g. Bucket4j), with `429` as a ProblemDetail and a `Retry-After` header. |
+| **No rate limiting on `/api/auth/*`** (signup, login, refresh, logout, and since step 3 `PUT /auth/password`). §1 lists it as a gateway responsibility, but step 2 shipped without it. | Step 2 | Online password guessing (also of the current password with a stolen access token) and signup spam are limited only by BCrypt's cost. | Per-IP and per-email limits at the gateway (e.g. Bucket4j), with `429` as a ProblemDetail and a `Retry-After` header. |
+| **Kafka I/O inside the outbox relay's database transaction** (`OutboxRelay.publishPending`). The relay holds a pool connection and the row locks while it waits for broker acks. | Step 3 | A slow broker ties up a connection and the locked rows for up to `batchSize × sendTimeout` per run. | Lock and read the batch and commit; send outside the transaction; mark the rows published in a second short transaction (the outbox is at-least-once anyway). Alternatively, send the batch asynchronously and `flush()` once. |
+| **`SKIP LOCKED` does not keep per-key order across relay instances** (`JdbcOutboxRepository.lockPending`). With two instances, B skips the rows A has locked and sends newer rows first. | Step 3 | If A then fails on a row, B has already sent later events for the same key. Order per key only holds while each service runs one instance. | One relay at a time via `pg_try_advisory_xact_lock`, or relays assigned by a hash of the key. |
+| **Email (PII) in an immutable topic** (`UserRegistered.email`). The address stays in `auth.user-registered.v1`, in every `.DLT` copy, and in the outbox rows for 7 days. | Step 3 | Erasing a user's email on request means rewriting or expiring topic data. | Decide on topic retention and an erasure approach in an ADR, or replace the email with a username hint. |
+| **No test against a real Kafka outage.** Send failures are tested against a mocked or wrapped `KafkaOperations`, and a missing topic, but never with the broker down. | Step 3 | Nothing proves that the relay stops cleanly, keeps the rows and sends them once Kafka is back. Also, a timeout cannot tell a down broker from a missing topic, so an outage longer than about `max-attempts × sendTimeout` (about 100 s by default) marks the oldest row `FAILED`, which then needs a manual reset to `PENDING`. | An IT that pauses the Kafka container (or points the relay at an unreachable bootstrap server), asserts the rows stay unpublished, then resumes it and asserts they are delivered once and in order. Decide whether outages should count towards `max-attempts` (for example, check broker reachability before counting). |
 
 ## Verification
 

@@ -6,6 +6,9 @@ import com.bankdash.auth.domain.RefreshToken;
 import com.bankdash.auth.domain.RefreshTokenRepository;
 import com.bankdash.auth.domain.UserCredential;
 import com.bankdash.auth.domain.UserCredentialRepository;
+import com.bankdash.events.Topics;
+import com.bankdash.events.UserRegistered;
+import com.bankdash.messaging.Outbox;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Optional;
@@ -26,6 +29,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AccessTokenIssuer accessTokens;
     private final AuthProperties properties;
+    private final Outbox outbox;
     private final Clock clock;
     /** Compared against when the email is unknown, so both cases cost one BCrypt check. */
     private final String dummyHash;
@@ -36,25 +40,30 @@ public class AuthService {
             PasswordEncoder passwordEncoder,
             AccessTokenIssuer accessTokens,
             AuthProperties properties,
+            Outbox outbox,
             Clock clock) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.passwordEncoder = passwordEncoder;
         this.accessTokens = accessTokens;
         this.properties = properties;
+        this.outbox = outbox;
         this.clock = clock;
         this.dummyHash = passwordEncoder.encode("not-a-real-password");
     }
 
     /**
-     * Registers the user and logs them in. {@code fullName} is validated by the API but not stored here:
-     * auth does not own it. It goes into the user-registered event once the outbox exists (step 3).
+     * Registers the user and logs them in. {@code fullName} is not stored here, because auth does not own it: it
+     * travels in {@link UserRegistered}, which is written to the outbox in the same transaction, so the event
+     * exists exactly when the user does.
      */
     @Transactional
-    public Session signup(String email, String password) {
+    public Session signup(String fullName, String email, String password) {
         PasswordPolicy.check(password);
         UserCredential user = UserCredential.newUser(Emails.normalize(email), passwordEncoder.encode(password), clock.instant());
         users.insert(user);
+        outbox.publish(Topics.AUTH_USER_REGISTERED, user.id().toString(), UserRegistered.TYPE, UserRegistered.SCHEMA_VERSION,
+                new UserRegistered(user.id(), user.email(), fullName.strip()));
         return startSession(user);
     }
 
@@ -106,6 +115,41 @@ public class AuthService {
     public void logout(String rawRefreshToken) {
         refreshTokens.findByHashForUpdate(OpaqueTokens.sha256Hex(rawRefreshToken))
                 .ifPresent(token -> refreshTokens.revokeFamily(token.familyId()));
+    }
+
+    /**
+     * Sets a new password and ends every login of the user, including ones a thief may hold. The caller gets a
+     * fresh session, so the device that changed the password stays logged in.
+     *
+     * @throws WrongCurrentPasswordException if {@code currentPassword} is wrong
+     * @throws PasswordPolicy.InvalidPasswordException if the new password breaks the policy or is the current one
+     * @throws UnknownUserException if the user no longer exists or is disabled
+     */
+    @Transactional
+    public Session changePassword(UUID userId, String currentPassword, String newPassword) {
+        UserCredential user = activeUser(userId);
+        if (!passwordEncoder.matches(currentPassword, user.passwordHash())) {
+            throw new WrongCurrentPasswordException();
+        }
+        PasswordPolicy.check("newPassword", newPassword);
+        if (newPassword.equals(currentPassword)) {
+            throw new PasswordPolicy.InvalidPasswordException("newPassword", "Choose a password you are not using now");
+        }
+        users.updatePasswordHash(user.id(), passwordEncoder.encode(newPassword));
+        refreshTokens.revokeAllForUser(user.id());
+        log.info("Password changed for user {}: revoked all of their refresh tokens", user.id());
+        return startSession(user);
+    }
+
+    /** Stores the Settings → Security flag only; there is no second factor yet (docs/architecture.md section 6). */
+    @Transactional
+    public boolean setTwoFactorEnabled(UUID userId, boolean enabled) {
+        users.updateTwoFactorEnabled(activeUser(userId).id(), enabled);
+        return enabled;
+    }
+
+    private UserCredential activeUser(UUID userId) {
+        return users.findById(userId).filter(UserCredential::isActive).orElseThrow(UnknownUserException::new);
     }
 
     public Optional<UserCredential> findUser(UUID id) {

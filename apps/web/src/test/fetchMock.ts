@@ -2,8 +2,10 @@ import { vi } from 'vitest'
 
 type Handler = (request: Request) => Response | Promise<Response>
 
+export type Routes = Record<string, Handler>
+
 /** Replaces global fetch with a router keyed by "METHOD /path". Unrouted calls fail the test loudly. */
-export function mockFetch(routes: Record<string, Handler>) {
+export function mockFetch(routes: Routes) {
   const calls: Request[] = []
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(new URL(String(input), 'http://localhost'), init)
