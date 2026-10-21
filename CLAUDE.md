@@ -12,10 +12,11 @@ Prerequisites: JDK 25 (Gradle toolchain; foojay downloads it if missing), Node 2
 ./gradlew test                           # unit + Testcontainers integration tests (needs Docker)
 ./gradlew :services:<svc>:bootRun        # run one service, e.g. :services:auth-service:bootRun (uses the dev profile)
 
-# Local stack: infra + topics, then auth-service (8081), profile-service (8082) and the gateway (8080), then the web app
+# Local stack: infra + topics, then auth-service (8081), profile-service (8082), account-service (8083) and the gateway (8080), then the web app
 ./infra/kafka/create-topics.sh           # creates every topic of infra/kafka/topics.txt (safe to re-run)
 ./gradlew :services:auth-service:bootRun
 ./gradlew :services:profile-service:bootRun
+./gradlew :services:account-service:bootRun
 ./gradlew :services:api-gateway:bootRun
 
 # Infrastructure: Postgres, Kafka, Kafka UI (no .env needed; see .env.example for overrides)
@@ -69,8 +70,10 @@ libs/               shared Java libraries
 services/           one Gradle project per microservice
   auth-service/     signup (emits auth.user-registered.v1), login, refresh, logout, /auth/me, password, two-factor, JWKS
   profile-service/  profile, preferences, avatar; creates profiles from auth.user-registered.v1
+  account-service/  accounts and cards (list, details, add, PIN, block → cards.status-changed.v1); opens CHECKING,
+                    SAVINGS and a first card from auth.user-registered.v1
   api-gateway/      Spring Cloud Gateway (WebMVC): /api/** routes, JWT validation, CORS
-apps/web/           React + TS + Vite frontend (api/, auth/, profile/, layout/, pages/, routes.tsx); TanStack Query;
+apps/web/           React + TS + Vite frontend (api/, auth/, profile/, cards/, layout/, pages/, routes.tsx); TanStack Query;
                     Vite proxies /api to :8080
 infra/              postgres/init.sql; kafka/topics.txt + create-topics.sh
 specs/              one folder per ticket (spec.md, plan.md, tasks.md); _template/spec.md

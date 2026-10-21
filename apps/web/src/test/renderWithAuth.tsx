@@ -10,14 +10,14 @@ import { FakeAuth } from './FakeAuth'
 import { json, mockFetch, type Routes } from './fetchMock'
 import { janePreferences, janeProfile } from './users'
 
-export { jane, janePreferences, janeProfile } from './users'
+export { jane, janeCards, janePreferences, janeProfile } from './users'
 
 interface FakeAuthOptions {
   state?: AuthState
   /** Replace to simulate server failures; by default every call succeeds. */
   login?: AuthContextValue['login']
   signup?: AuthContextValue['signup']
-  /** API responses by "METHOD /api/path", on top of defaults for Jane's profile and preferences. */
+  /** API responses by "METHOD /api/path", on top of defaults for Jane's profile, preferences and (no) cards. */
   api?: Routes
 }
 
@@ -36,6 +36,7 @@ export function renderWithAuth(path: string, options: FakeAuthOptions = {}) {
   const api = mockFetch({
     'GET /api/profile/me': () => json(janeProfile),
     'GET /api/preferences': () => json(janePreferences),
+    'GET /api/cards': () => json({ cards: [] }),
     ...options.api,
   })
   const queryClient = createQueryClient({ retryDelay: 0 })

@@ -16,6 +16,8 @@ export interface Problem {
   status?: number
   detail?: string
   errors?: { field: string; message: string }[]
+  /** account-service's broken PIN rule on a 422 "Weak PIN", e.g. CONSECUTIVE_DIGITS. */
+  rule?: string
 }
 
 export class ApiError extends Error {
