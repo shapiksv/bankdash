@@ -73,7 +73,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC6, AC8, AC9, AC10
   - Tests: `it('AC8: offers Set PIN for an inactive card and shows it active after saving')`, `it('AC9: changes the PIN of an active card')`, `it('AC10: blocks a weak PIN before sending')`, `it('AC10: shows the backend rule detail on 422')`, `it('AC6: adds a card to the chosen account')`
 
-- [ ] **T15** — Show the Dashboard "My Cards" widget
+- [x] **T15** — Show the Dashboard "My Cards" widget
   - Files: `apps/web/src/cards/MyCardsWidget.tsx`, `apps/web/src/pages/DashboardPage.tsx`, `apps/web/src/pages/DashboardPage.test.tsx`
   - Covers: AC17
   - Tests: `it('AC17: shows at most 2 cards with masked numbers')` (asserts `limit=2` in the request)
