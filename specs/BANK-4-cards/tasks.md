@@ -78,7 +78,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC17
   - Tests: `it('AC17: shows at most 2 cards with masked numbers')` (asserts `limit=2` in the request)
 
-- [ ] **T16** — Document account-service in CLAUDE.md
+- [x] **T16** — Document account-service in CLAUDE.md
   - Files: `CLAUDE.md`
   - Covers: — (keeps the commands and repository structure accurate now that a third service exists)
   - Tests: none (docs only); `./gradlew build` and `npm test` stay green
