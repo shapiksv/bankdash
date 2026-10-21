@@ -292,7 +292,7 @@ CREATE TABLE card (
     status       varchar(16) NOT NULL CHECK (status IN ('INACTIVE', 'ACTIVE', 'BLOCKED')),
     created_at   timestamptz NOT NULL,
     updated_at   timestamptz NOT NULL,
-    CHECK (status = 'INACTIVE' OR pin_hash IS NOT NULL)
+    CHECK (status <> 'ACTIVE' OR pin_hash IS NOT NULL)   -- an INACTIVE card may be blocked without a PIN (AC13)
 );
 CREATE INDEX card_user_id_idx ON card (user_id, created_at, id);
 
