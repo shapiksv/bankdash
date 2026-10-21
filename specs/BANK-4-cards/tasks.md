@@ -18,8 +18,8 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC10, AC11 (the `SAME_AS_CURRENT` rule code; it is enforced in T7)
   - Tests: `PinPolicyTest.ac10_rejectsWeakPin` (parameterized over every rule and the spec's examples, asserting the rule), `PinPolicyTest.ac10_acceptsStrongPin`, `PinPolicyTest.ac10_rulesAreCheckedInSpecOrder`
 
-- [ ] **T4** — Add the card domain: number generation, masking, expiry and status
-  - Files: `domain/CardNumbers.java`, `domain/Card.java`, `domain/CardStatus.java`, `domain/AccountType.java`, `domain/Account.java`, `domain/Customer.java`, tests `domain/CardNumbersTest.java`, `domain/CardTest.java`
+- [x] **T4** — Add the card domain: number generation, masking, expiry and status
+  - Files: `domain/CardNumbers.java`, `domain/Card.java`, `domain/CardStatus.java`, `domain/CardType.java`, `domain/AccountType.java`, `domain/Account.java`, `domain/Customer.java`, tests `domain/CardNumbersTest.java`, `domain/CardTest.java`
   - Covers: AC1 (expiry +3 years), AC3 (masking), AC4 (displayed status), AC12 (expiry derivation)
   - Tests: `CardNumbersTest.ac1_generatesSixteenLuhnValidDigits`, `CardNumbersTest.ac3_masksAllButLastFour`, `CardTest.ac1_expiresThreeYearsAfterIssue`, `CardTest.ac4_reportsExpiredAfterTheExpiryMonth`, `CardTest.ac4_blockedWinsOverExpired`, `CardTest.ac12_isValidThroughTheLastDayOfTheExpiryMonth`
 
