@@ -35,7 +35,7 @@ const card = (id: string, last4: string, accountId: string, status: Card['status
   status,
 })
 
-/** The registration card (no PIN yet), then two added ones. */
+/** Jane's cards as `GET /api/cards` returns them: one without a PIN yet and two ACTIVE ones. */
 export const janeCards: Card[] = [
   card('c1', '5678', 'checking', 'INACTIVE'),
   card('c2', '1234', 'savings', 'ACTIVE'),

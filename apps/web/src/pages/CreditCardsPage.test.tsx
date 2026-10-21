@@ -27,6 +27,23 @@ describe('Credit Cards', () => {
     expect(document.body.textContent).not.toMatch(/\d{5}/)
   })
 
+  it('AC20: lists the cards in the order the API returns them and opens the first one', async () => {
+    // The API's order: non-blocked newest first, then blocked.
+    const ordered: Card[] = [janeCards[2], janeCards[0], { ...janeCards[1], status: 'BLOCKED' }]
+    renderWithAuth('/credit-cards', {
+      state: authenticated,
+      api: { 'GET /api/cards': () => json({ cards: ordered }) },
+    })
+
+    const list = await screen.findByRole('list', { name: 'Cards' })
+    expect(within(list).getAllByTestId('masked-number').map((n) => n.textContent)).toEqual([
+      '**** **** **** 9012',
+      '**** **** **** 5678',
+      '**** **** **** 1234',
+    ])
+    expect((await loadedDetails()).getByText('**** **** **** 9012')).toBeInTheDocument()
+  })
+
   it('AC17: shows an empty state while cards are being prepared', async () => {
     renderWithAuth('/credit-cards', { state: authenticated })
 

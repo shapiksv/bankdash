@@ -88,7 +88,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC20, AC17 (the server half: `limit` returns the newest non-blocked cards first)
   - Tests: `ac20_nonBlockedNewestFirstThenBlockedNewestFirst`, `ac20_limitReturnsTheFirstCardsOfThatOrder` (replaces `ac3_limitReturnsTheFirstCardsInCreationOrder`)
 
-- [ ] **T18** — Show only non-blocked cards in the Dashboard widget (CR-1)
+- [x] **T18** — Show only non-blocked cards in the Dashboard widget (CR-1)
   - Files: `apps/web/src/cards/MyCardsWidget.tsx`, `apps/web/src/pages/DashboardPage.test.tsx`, `apps/web/src/pages/CreditCardsPage.test.tsx`
   - Covers: AC17, AC20 (UI)
   - Tests: `it('AC17: shows at most 2 cards with masked numbers')` (updated), `it('AC17: never shows a blocked card')`, `it('AC17: says so when every card is blocked')`, `it('AC20: lists the cards in the order the API returns them')`
