@@ -93,7 +93,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC17, AC20 (UI)
   - Tests: `it('AC17: shows at most 2 cards with masked numbers')` (updated), `it('AC17: never shows a blocked card')`, `it('AC17: says so when every card is blocked')`, `it('AC20: lists the cards in the order the API returns them')`
 
-- [ ] **T19** — Answer a missing or unknown accountType with the CR-1 400 detail
+- [x] **T19** — Answer a missing or unknown accountType with the CR-1 400 detail
   - Files: `api/CardController.java` (`AddCardRequest.accountType` as String), `api/InvalidAccountTypeException.java`, `api/CardExceptionHandler.java`, `domain/AccountType.java` (`parse`), test `api/AddCardApiIT.java`
   - Covers: AC21
   - Tests: `ac21_unknownAccountTypeIs400WithTheDetail`, `ac21_missingAccountTypeIs400WithTheDetail` (replace `unknownAccountTypeIs400`)

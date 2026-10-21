@@ -11,6 +11,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -162,13 +164,29 @@ class AddCardApiIT extends AccountIT {
         assertThat(cards(userId)).isZero();
     }
 
-    @Test
-    void unknownAccountTypeIs400() {
+    void assertInvalidAccountType(MvcTestResult response) {
+        assertThat(response).hasStatus(HttpStatus.BAD_REQUEST);
+        assertThat(response).bodyJson().extractingPath("$.detail").isEqualTo("accountType must be CHECKING or SAVINGS");
+        assertThat(response).bodyJson().extractingPath("$.errors[0].field").isEqualTo("accountType");
+    }
+
+    @ParameterizedTest(name = "AC21: accountType {0} is 400")
+    @ValueSource(strings = {"CREDIT", "checking", ""})
+    void ac21_unknownAccountTypeIs400WithTheDetail(String accountType) {
         UUID userId = registeredUser("Jane Doe");
 
-        assertThat(add(userId, "CREDIT", "4826")).hasStatus(HttpStatus.BAD_REQUEST);
-        assertThat(add(userId, """
-                {"pin": "4826"}""")).hasStatus(HttpStatus.BAD_REQUEST);
+        assertInvalidAccountType(add(userId, accountType, "4826"));
+        assertThat(cards(userId)).isOne();
+    }
+
+    @Test
+    void ac21_missingAccountTypeIs400WithTheDetail() {
+        UUID userId = registeredUser("Jane Doe");
+
+        assertInvalidAccountType(add(userId, """
+                {"pin": "4826"}"""));
+        assertInvalidAccountType(add(userId, """
+                {"accountType": null, "pin": "4826"}"""));
         assertThat(cards(userId)).isOne();
     }
 }

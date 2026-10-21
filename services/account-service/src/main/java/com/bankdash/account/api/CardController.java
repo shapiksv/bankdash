@@ -53,10 +53,14 @@ class CardController {
         return CardResponse.of(cards.get(userId, id), cards.today());
     }
 
-    /** 201 with the new card: ACTIVE, since it gets its PIN right away. */
+    /**
+     * 201 with the new card: ACTIVE, since it gets its PIN right away. The account type is parsed here rather than
+     * bound as an enum, so a missing or unknown one gets its own 400 detail instead of "Failed to read request".
+     */
     @PostMapping
     ResponseEntity<CardResponse> add(@CurrentUser UUID userId, @Valid @RequestBody AddCardRequest request) {
-        Card card = cards.add(userId, request.accountType(), request.pin());
+        AccountType accountType = AccountType.parse(request.accountType()).orElseThrow(InvalidAccountTypeException::new);
+        Card card = cards.add(userId, accountType, request.pin());
         return ResponseEntity.created(URI.create("/cards/" + card.id())).body(CardResponse.of(card, cards.today()));
     }
 
@@ -76,7 +80,7 @@ class CardController {
 
     record SetPinRequest(@NotNull String pin) {}
 
-    record AddCardRequest(@NotNull AccountType accountType, @NotNull String pin) {}
+    record AddCardRequest(@Nullable String accountType, @NotNull String pin) {}
 
     record CardListResponse(List<CardResponse> cards) {}
 

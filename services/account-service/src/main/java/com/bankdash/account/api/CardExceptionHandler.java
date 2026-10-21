@@ -31,6 +31,14 @@ class CardExceptionHandler {
         return Problems.of(HttpStatus.NOT_FOUND, "Account not found", "The account does not exist yet");
     }
 
+    /** The shared validation shape, with a detail that names the allowed values. */
+    @ExceptionHandler
+    ProblemDetail handle(InvalidAccountTypeException ex) {
+        ProblemDetail problem = Problems.validation("accountType", InvalidAccountTypeException.DETAIL);
+        problem.setDetail(InvalidAccountTypeException.DETAIL);
+        return problem;
+    }
+
     @ExceptionHandler
     ProblemDetail handle(CardLimitReachedException ex) {
         return Problems.of(HttpStatus.CONFLICT, "Card limit reached", ex.getMessage());
