@@ -1,6 +1,6 @@
 # BANK-4: Cards and accounts for new customers
 
-- **Status:** Reviewed
+- **Status:** Verified
 - **Services:** services/account-service (new), services/api-gateway, libs/events, infra/kafka, apps/web
 
 ## Context
