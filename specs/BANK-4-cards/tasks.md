@@ -63,7 +63,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC4, AC17
   - Tests: `it('AC17: lists all cards with masked numbers')`, `it('AC17: shows an empty state while cards are being prepared')`, `it('AC4: shows status, expiry and linked account in the details')`
 
-- [ ] **T13** — Block a card through a confirmation dialog
+- [x] **T13** — Block a card through a confirmation dialog
   - Files: `apps/web/src/cards/ConfirmDialog.tsx`, `apps/web/src/pages/CreditCardsPage.tsx`, `apps/web/src/pages/CreditCardsPage.test.tsx`
   - Covers: AC15, AC13 (UI)
   - Tests: `it('AC15: sends the block request only after Confirm')`, `it('AC15: Cancel sends no request')`, `it('AC13: shows the card as blocked and a confirmation message')`

@@ -1,7 +1,8 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { json } from '../test/fetchMock'
+import type { Card } from '../api/cards'
+import { json, problem } from '../test/fetchMock'
 import { jane, janeCards, renderWithAuth } from '../test/renderWithAuth'
 
 const authenticated = { status: 'authenticated', user: jane } as const
@@ -46,5 +47,87 @@ describe('Credit Cards', () => {
 
     expect(await screen.findByRole('region', { name: 'Card details' })).toHaveTextContent('Card ending 5678')
     expect(details().getByText('Inactive')).toBeInTheDocument()
+  })
+
+  describe('Block card', () => {
+    /** The cards as account-service would return them, updated by the block request. */
+    function blockableCards() {
+      let cards: Card[] = janeCards.map((card) => ({ ...card }))
+      return {
+        'GET /api/cards': () => json({ cards }),
+        'POST /api/cards/c2/block': () => {
+          cards = cards.map((card) => (card.id === 'c2' ? { ...card, status: 'BLOCKED' as const } : card))
+          return new Response(null, { status: 204 })
+        },
+      }
+    }
+
+    async function openBlockDialog() {
+      await userEvent.click(await screen.findByRole('button', { name: 'Card ending 1234' }))
+      await userEvent.click(details().getByRole('button', { name: 'Block card' }))
+      return screen.getByRole('alertdialog', { name: 'Block card ending 1234?' })
+    }
+
+    const blockCalls = (calls: Request[]) => calls.filter((c) => c.method === 'POST')
+
+    it('AC15: sends the block request only after Confirm', async () => {
+      const { api } = renderWithAuth('/credit-cards', { state: authenticated, api: blockableCards() })
+
+      const dialog = await openBlockDialog()
+      expect(dialog).toHaveTextContent('cannot be unblocked')
+      expect(blockCalls(api.calls)).toHaveLength(0)
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+      expect(blockCalls(api.calls).map((c) => new URL(c.url).pathname)).toEqual(['/api/cards/c2/block'])
+    })
+
+    it('AC15: Cancel sends no request', async () => {
+      const { api } = renderWithAuth('/credit-cards', { state: authenticated, api: blockableCards() })
+
+      const dialog = await openBlockDialog()
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(blockCalls(api.calls)).toHaveLength(0)
+    })
+
+    it('AC15: Escape closes the dialog without blocking', async () => {
+      const { api } = renderWithAuth('/credit-cards', { state: authenticated, api: blockableCards() })
+
+      await openBlockDialog()
+      await userEvent.keyboard('{Escape}')
+
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+      expect(blockCalls(api.calls)).toHaveLength(0)
+    })
+
+    it('AC13: shows the card as blocked and a confirmation message', async () => {
+      renderWithAuth('/credit-cards', { state: authenticated, api: blockableCards() })
+
+      const dialog = await openBlockDialog()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Card ending 1234 has been blocked')
+      expect(await details().findByText('Blocked')).toBeInTheDocument()
+      expect(details().queryByRole('button', { name: 'Block card' })).not.toBeInTheDocument()
+    })
+
+    it('AC14: shows the error when the card was already blocked', async () => {
+      renderWithAuth('/credit-cards', {
+        state: authenticated,
+        api: {
+          ...withCards,
+          'POST /api/cards/c2/block': () =>
+            problem(409, { title: 'Card already blocked', detail: 'The card is already blocked' }),
+        },
+      })
+
+      const dialog = await openBlockDialog()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+      expect(await details().findByRole('alert')).toHaveTextContent('The card is already blocked')
+    })
   })
 })
