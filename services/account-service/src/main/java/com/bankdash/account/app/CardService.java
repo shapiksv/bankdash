@@ -1,11 +1,18 @@
 package com.bankdash.account.app;
 
+import com.bankdash.account.domain.Account;
+import com.bankdash.account.domain.AccountNotFoundException;
+import com.bankdash.account.domain.AccountRepository;
+import com.bankdash.account.domain.AccountType;
 import com.bankdash.account.domain.Card;
 import com.bankdash.account.domain.CardAlreadyBlockedException;
+import com.bankdash.account.domain.CardLimitReachedException;
 import com.bankdash.account.domain.CardNotFoundException;
 import com.bankdash.account.domain.CardNotUsableException;
 import com.bankdash.account.domain.CardRepository;
 import com.bankdash.account.domain.CardStatus;
+import com.bankdash.account.domain.Customer;
+import com.bankdash.account.domain.CustomerRepository;
 import com.bankdash.account.domain.PinPolicy;
 import com.bankdash.account.domain.PinRule;
 import com.bankdash.account.domain.WeakPinException;
@@ -28,13 +35,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CardService {
 
+    /** Cards a user may have that are not blocked. */
+    public static final int MAX_CARDS = 5;
+
     private final CardRepository cards;
+    private final CustomerRepository customers;
+    private final AccountRepository accounts;
+    private final CardIssuer issuer;
     private final PasswordEncoder pinEncoder;
     private final Outbox outbox;
     private final Clock clock;
 
-    CardService(CardRepository cards, PasswordEncoder pinEncoder, Outbox outbox, Clock clock) {
+    CardService(CardRepository cards, CustomerRepository customers, AccountRepository accounts, CardIssuer issuer,
+            PasswordEncoder pinEncoder, Outbox outbox, Clock clock) {
         this.cards = cards;
+        this.customers = customers;
+        this.accounts = accounts;
+        this.issuer = issuer;
         this.pinEncoder = pinEncoder;
         this.outbox = outbox;
         this.clock = clock;
@@ -47,6 +64,29 @@ public class CardService {
 
     public Card get(UUID userId, UUID cardId) {
         return cards.findOwned(cardId, userId).orElseThrow(() -> new CardNotFoundException(cardId));
+    }
+
+    /**
+     * Issues an ACTIVE debit card with {@code pin} on the user's account of {@code accountType}. The holder name is
+     * the name the user registered with.
+     *
+     * @throws AccountNotFoundException if the user's accounts have not been opened yet
+     * @throws CardLimitReachedException if the user already has {@value #MAX_CARDS} cards that are not blocked
+     * @throws WeakPinException if the PIN breaks a {@link PinRule}
+     */
+    @Transactional
+    public Card add(UUID userId, AccountType accountType, String pin) {
+        Customer customer = customers.lockById(userId)
+                .orElseThrow(() -> new AccountNotFoundException(userId, accountType));
+        Account account = accounts.findByUserAndType(userId, accountType)
+                .orElseThrow(() -> new AccountNotFoundException(userId, accountType));
+        if (cards.countNonBlocked(userId) >= MAX_CARDS) {
+            throw new CardLimitReachedException(MAX_CARDS);
+        }
+        PinPolicy.requireStrong(pin);
+        Card card = issuer.issue(userId, account.id(), customer.fullName(), pinEncoder.encode(pin));
+        cards.insert(card);
+        return card;
     }
 
     /**

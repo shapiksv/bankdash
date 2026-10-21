@@ -1,6 +1,7 @@
 package com.bankdash.account.api;
 
 import com.bankdash.account.app.CardService;
+import com.bankdash.account.domain.AccountType;
 import com.bankdash.account.domain.Card;
 import com.bankdash.account.domain.CardNumbers;
 import com.bankdash.account.domain.CardStatus;
@@ -10,11 +11,13 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import java.net.URI;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -47,6 +50,13 @@ class CardController {
         return CardResponse.of(cards.get(userId, id), cards.today());
     }
 
+    /** 201 with the new card: ACTIVE, since it gets its PIN right away. */
+    @PostMapping
+    ResponseEntity<CardResponse> add(@CurrentUser UUID userId, @Valid @RequestBody AddCardRequest request) {
+        Card card = cards.add(userId, request.accountType(), request.pin());
+        return ResponseEntity.created(URI.create("/cards/" + card.id())).body(CardResponse.of(card, cards.today()));
+    }
+
     /** 204; the PIN rules are checked by the service (422), so the request only needs a value. */
     @PutMapping("/{id}/pin")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -62,6 +72,8 @@ class CardController {
     }
 
     record SetPinRequest(@NotNull String pin) {}
+
+    record AddCardRequest(@NotNull AccountType accountType, @NotNull String pin) {}
 
     record CardListResponse(List<CardResponse> cards) {}
 

@@ -43,7 +43,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC5, AC13, AC14
   - Tests: `ac13_blocksTheCardAndPublishesStatusChanged`, `ac13_blocksAnInactiveCard`, `ac14_alreadyBlockedIs409AndPublishesNothing`, `ac5_someoneElsesCardIs404AndStaysUnblocked`
 
-- [ ] **T9** — Add a card to the caller's account of a given type
+- [x] **T9** — Add a card to the caller's account of a given type
   - Files: `app/CardService.java` (add), `domain/AccountNotFoundException.java`, `domain/CardLimitReachedException.java`, repositories (`lockCustomer`, `countNonBlocked`, `findByUserAndType`), `api/CardController.java` (POST `/cards`, `AddCardRequest`), `api/CardExceptionHandler.java`, test `api/AddCardApiIT.java`
   - Covers: AC6, AC10, AC16, AC19
   - Tests: `ac6_addsAnActiveCardToTheCheckingAccount`, `ac6_addsAnActiveCardToTheSavingsAccount`, `ac6_holderNameComesFromTheRegisteredCustomer`, `ac10_weakPinOnAddIs422AndNoCardIsCreated`, `ac16_sixthNonBlockedCardIs409`, `ac16_blockedCardsDoNotCountTowardsTheLimit`, `ac16_concurrentAddsNeverExceedTheLimit`, `ac19_noAccountsYetIs404`, `unknownAccountTypeIs400`

@@ -1,6 +1,8 @@
 package com.bankdash.account.api;
 
+import com.bankdash.account.domain.AccountNotFoundException;
 import com.bankdash.account.domain.CardAlreadyBlockedException;
+import com.bankdash.account.domain.CardLimitReachedException;
 import com.bankdash.account.domain.CardNotFoundException;
 import com.bankdash.account.domain.CardNotUsableException;
 import com.bankdash.account.domain.WeakPinException;
@@ -21,6 +23,17 @@ class CardExceptionHandler {
     @ExceptionHandler
     ProblemDetail handle(CardNotFoundException ex) {
         return Problems.of(HttpStatus.NOT_FOUND, "Card not found", "The card does not exist");
+    }
+
+    /** The web app shows an empty state meanwhile; the accounts appear once the user-registered event is processed. */
+    @ExceptionHandler
+    ProblemDetail handle(AccountNotFoundException ex) {
+        return Problems.of(HttpStatus.NOT_FOUND, "Account not found", "The account does not exist yet");
+    }
+
+    @ExceptionHandler
+    ProblemDetail handle(CardLimitReachedException ex) {
+        return Problems.of(HttpStatus.CONFLICT, "Card limit reached", ex.getMessage());
     }
 
     @ExceptionHandler

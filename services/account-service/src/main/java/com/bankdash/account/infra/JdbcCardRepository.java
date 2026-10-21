@@ -66,6 +66,14 @@ class JdbcCardRepository implements CardRepository {
                 .update();
     }
 
+    @Override
+    public int countNonBlocked(UUID userId) {
+        return jdbc.sql("SELECT count(*) FROM card WHERE user_id = ? AND status <> 'BLOCKED'")
+                .param(userId)
+                .query(Integer.class)
+                .single();
+    }
+
     static Card map(ResultSet rs, int row) throws SQLException {
         return new Card(
                 rs.getObject("id", UUID.class),

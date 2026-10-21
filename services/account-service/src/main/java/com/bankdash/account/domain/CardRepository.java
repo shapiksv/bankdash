@@ -19,4 +19,7 @@ public interface CardRepository {
 
     /** Saves the PIN hash, status and updatedAt of an existing card. */
     void update(Card card);
+
+    /** Cards that count towards the card limit: every card that is not blocked, expired ones included. */
+    int countNonBlocked(UUID userId);
 }
