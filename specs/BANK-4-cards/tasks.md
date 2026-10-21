@@ -38,7 +38,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC5, AC8, AC9, AC10, AC11, AC12
   - Tests: `ac8_firstPinActivatesTheCardAndIsStoredHashed`, `ac9_changesThePin`, `ac10_weakPinIs422WithTheRuleAndPinUnchanged` (parameterized: 0000, 1234, 9876, 1212, 1998, 2580, abcd, 123), `ac11_samePinAsCurrentIs422`, `ac12_blockedCardIs409`, `ac12_expiredCardIs409`, `ac5_someoneElsesCardIs404`
 
-- [ ] **T8** — Block a card and publish `cards.status-changed.v1`
+- [x] **T8** — Block a card and publish `cards.status-changed.v1`
   - Files: `app/CardService.java` (block, `Outbox.publish`), `domain/CardAlreadyBlockedException.java`, `api/CardController.java` (POST `/cards/{id}/block`), `api/CardExceptionHandler.java`, test `api/CardBlockApiIT.java`
   - Covers: AC5, AC13, AC14
   - Tests: `ac13_blocksTheCardAndPublishesStatusChanged`, `ac13_blocksAnInactiveCard`, `ac14_alreadyBlockedIs409AndPublishesNothing`, `ac5_someoneElsesCardIs404AndStaysUnblocked`

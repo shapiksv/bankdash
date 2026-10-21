@@ -1,5 +1,6 @@
 package com.bankdash.account.api;
 
+import com.bankdash.account.domain.CardAlreadyBlockedException;
 import com.bankdash.account.domain.CardNotFoundException;
 import com.bankdash.account.domain.CardNotUsableException;
 import com.bankdash.account.domain.WeakPinException;
@@ -20,6 +21,11 @@ class CardExceptionHandler {
     @ExceptionHandler
     ProblemDetail handle(CardNotFoundException ex) {
         return Problems.of(HttpStatus.NOT_FOUND, "Card not found", "The card does not exist");
+    }
+
+    @ExceptionHandler
+    ProblemDetail handle(CardAlreadyBlockedException ex) {
+        return Problems.of(HttpStatus.CONFLICT, "Card already blocked", "The card is already blocked");
     }
 
     @ExceptionHandler

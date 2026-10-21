@@ -1,12 +1,17 @@
 package com.bankdash.account.app;
 
 import com.bankdash.account.domain.Card;
+import com.bankdash.account.domain.CardAlreadyBlockedException;
 import com.bankdash.account.domain.CardNotFoundException;
 import com.bankdash.account.domain.CardNotUsableException;
 import com.bankdash.account.domain.CardRepository;
+import com.bankdash.account.domain.CardStatus;
 import com.bankdash.account.domain.PinPolicy;
 import com.bankdash.account.domain.PinRule;
 import com.bankdash.account.domain.WeakPinException;
+import com.bankdash.events.CardStatusChanged;
+import com.bankdash.events.Topics;
+import com.bankdash.messaging.Outbox;
 import java.time.Clock;
 import java.time.YearMonth;
 import java.util.List;
@@ -25,11 +30,13 @@ public class CardService {
 
     private final CardRepository cards;
     private final PasswordEncoder pinEncoder;
+    private final Outbox outbox;
     private final Clock clock;
 
-    CardService(CardRepository cards, PasswordEncoder pinEncoder, Clock clock) {
+    CardService(CardRepository cards, PasswordEncoder pinEncoder, Outbox outbox, Clock clock) {
         this.cards = cards;
         this.pinEncoder = pinEncoder;
+        this.outbox = outbox;
         this.clock = clock;
     }
 
@@ -62,6 +69,23 @@ public class CardService {
             throw new WeakPinException(PinRule.SAME_AS_CURRENT);
         }
         cards.update(card.withPin(pinEncoder.encode(pin), clock.instant()));
+    }
+
+    /**
+     * Blocks the card for good and emits cards.status-changed.v1 in the same transaction. An expired card can still
+     * be blocked.
+     *
+     * @throws CardAlreadyBlockedException if it was blocked before; nothing is emitted then
+     */
+    @Transactional
+    public void block(UUID userId, UUID cardId) {
+        Card card = cards.lockOwned(cardId, userId).orElseThrow(() -> new CardNotFoundException(cardId));
+        if (card.isBlocked()) {
+            throw new CardAlreadyBlockedException(cardId);
+        }
+        cards.update(card.blocked(clock.instant()));
+        outbox.publish(Topics.CARDS_STATUS_CHANGED, cardId.toString(), CardStatusChanged.TYPE,
+                CardStatusChanged.SCHEMA_VERSION, new CardStatusChanged(cardId, userId, CardStatus.BLOCKED.name()));
     }
 
     /** The current month in UTC, which decides whether a card has expired. */

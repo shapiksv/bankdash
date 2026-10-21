@@ -37,7 +37,8 @@ CREATE TABLE card (
     status       varchar(16)  NOT NULL CHECK (status IN ('INACTIVE', 'ACTIVE', 'BLOCKED')),
     created_at   timestamptz  NOT NULL,
     updated_at   timestamptz  NOT NULL,
-    CONSTRAINT card_pin_unless_inactive CHECK (status = 'INACTIVE' OR pin_hash IS NOT NULL)
+    -- An ACTIVE card always has a PIN; an INACTIVE one may still be blocked without ever getting one.
+    CONSTRAINT card_active_has_pin CHECK (status <> 'ACTIVE' OR pin_hash IS NOT NULL)
 );
 
 -- A user's cards in the order GET /cards returns them.

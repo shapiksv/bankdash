@@ -17,6 +17,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,6 +52,13 @@ class CardController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void setPin(@CurrentUser UUID userId, @PathVariable UUID id, @Valid @RequestBody SetPinRequest request) {
         cards.setPin(userId, id, request.pin());
+    }
+
+    /** Final: there is no unblocking. The web app asks for confirmation first. */
+    @PostMapping("/{id}/block")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void block(@CurrentUser UUID userId, @PathVariable UUID id) {
+        cards.block(userId, id);
     }
 
     record SetPinRequest(@NotNull String pin) {}
