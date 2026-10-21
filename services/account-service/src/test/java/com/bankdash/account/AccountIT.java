@@ -1,5 +1,6 @@
 package com.bankdash.account;
 
+import com.bankdash.account.domain.CardRepository;
 import com.bankdash.events.EventEnvelope;
 import com.bankdash.events.Topics;
 import com.bankdash.events.UserRegistered;
@@ -17,6 +18,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -48,6 +50,10 @@ public abstract class AccountIT {
 
     @Autowired
     protected JsonMapper json;
+
+    /** The real repository unless a test stubs it. Declared here, so that all subclasses share one context. */
+    @MockitoSpyBean
+    protected CardRepository cardRepository;
 
     protected String bearer(UUID userId) {
         return "Bearer " + issuer.token(userId);

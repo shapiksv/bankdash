@@ -23,8 +23,8 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC1 (expiry +3 years), AC3 (masking), AC4 (displayed status), AC12 (expiry derivation)
   - Tests: `CardNumbersTest.ac1_generatesSixteenLuhnValidDigits`, `CardNumbersTest.ac3_masksAllButLastFour`, `CardTest.ac1_expiresThreeYearsAfterIssue`, `CardTest.ac4_reportsExpiredAfterTheExpiryMonth`, `CardTest.ac4_blockedWinsOverExpired`, `CardTest.ac12_isValidThroughTheLastDayOfTheExpiryMonth`
 
-- [ ] **T5** — Open accounts and a card from `auth.user-registered.v1`
-  - Files: `domain/CustomerRepository.java`, `domain/AccountRepository.java`, `domain/CardRepository.java`, `infra/JdbcCustomerRepository.java`, `infra/JdbcAccountRepository.java`, `infra/JdbcCardRepository.java`, `app/AccountService.java`, `infra/UserRegisteredListener.java`, test `infra/UserRegisteredListenerIT.java`
+- [x] **T5** — Open accounts and a card from `auth.user-registered.v1`
+  - Files: `domain/CustomerRepository.java`, `domain/AccountRepository.java`, `domain/CardRepository.java`, `infra/JdbcCustomerRepository.java`, `infra/JdbcAccountRepository.java`, `infra/JdbcCardRepository.java`, `app/AccountService.java`, `app/CardIssuer.java` (shared with T9), `infra/UserRegisteredListener.java`, test `infra/UserRegisteredListenerIT.java`
   - Covers: AC1, AC2
   - Tests: `ac1_opensCheckingSavingsAndAnInactiveDebitCard`, `ac1_failureRollsBackAndTheRetryCreatesEverything`, `ac2_duplicateEventIsIgnored`, `ac2_secondEventForTheSameUserCreatesNothing`, `poisonMessageLandsInTheDlt`, `eventWithoutUserIdLandsInTheDlt`
 
