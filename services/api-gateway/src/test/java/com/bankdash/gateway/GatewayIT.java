@@ -25,7 +25,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * The real gateway on a random port, with {@link TestJwtIssuer} as the JWKS source and stubs standing in for
- * auth-service and profile-service. No Docker needed.
+ * auth-service, profile-service and account-service. No Docker needed.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayIT {
@@ -33,11 +33,13 @@ class GatewayIT {
     static final TestJwtIssuer issuer = TestJwtIssuer.start();
     static final StubService authService = StubService.start();
     static final StubService profileService = StubService.start();
+    static final StubService accountService = StubService.start();
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("bankdash.services.auth", authService::url);
         registry.add("bankdash.services.profile", profileService::url);
+        registry.add("bankdash.services.account", accountService::url);
         registry.add("spring.security.oauth2.resourceserver.jwt.jwk-set-uri", issuer::jwksUri);
     }
 
@@ -46,6 +48,7 @@ class GatewayIT {
         issuer.close();
         authService.close();
         profileService.close();
+        accountService.close();
     }
 
     @LocalServerPort
@@ -58,6 +61,7 @@ class GatewayIT {
     void reset() {
         authService.lastRequest.set(null);
         profileService.lastRequest.set(null);
+        accountService.lastRequest.set(null);
     }
 
     HttpResponse<String> send(HttpRequest.Builder request) throws Exception {
@@ -193,6 +197,51 @@ class GatewayIT {
 
         assertThat(response.statusCode()).isEqualTo(401);
         assertThat(profileService.lastRequest.get()).isNull();
+    }
+
+    @Test
+    void cardRequestsGoToAccountService() throws Exception {
+        String token = issuer.token(user);
+
+        var response = send(request("/api/cards?limit=2").header("Authorization", "Bearer " + token));
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(accountService.lastRequest.get().path()).isEqualTo("/cards");
+        assertThat(accountService.lastRequest.get().authorization()).isEqualTo("Bearer " + token);
+        assertThat(profileService.lastRequest.get()).isNull();
+    }
+
+    @Test
+    void cardCommandsKeepMethodAndPath() throws Exception {
+        String token = issuer.token(user);
+
+        send(request("/api/cards/42/block").header("Authorization", "Bearer " + token)
+                .POST(HttpRequest.BodyPublishers.noBody()));
+        assertThat(accountService.lastRequest.get().method()).isEqualTo("POST");
+        assertThat(accountService.lastRequest.get().path()).isEqualTo("/cards/42/block");
+
+        send(request("/api/cards/42/pin").header("Authorization", "Bearer " + token)
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"pin\":\"4826\"}")));
+        assertThat(accountService.lastRequest.get().method()).isEqualTo("PUT");
+        assertThat(accountService.lastRequest.get().path()).isEqualTo("/cards/42/pin");
+        assertThat(new String(accountService.lastRequest.get().body(), StandardCharsets.UTF_8)).isEqualTo("{\"pin\":\"4826\"}");
+    }
+
+    @Test
+    void ac18_cardsWithoutTokenIs401() throws Exception {
+        var response = send(request("/api/cards").POST(HttpRequest.BodyPublishers.ofString("{}")));
+
+        assertRejected(response);
+        assertThat(accountService.lastRequest.get()).as("request must not reach account-service").isNull();
+    }
+
+    @Test
+    void ac18_cardsWithInvalidTokenIs401() throws Exception {
+        var response = send(request("/api/cards").header("Authorization", "Bearer " + issuer.expiredToken(user)));
+
+        assertRejected(response);
+        assertThat(accountService.lastRequest.get()).as("request must not reach account-service").isNull();
     }
 
     @Test

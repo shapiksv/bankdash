@@ -48,7 +48,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC6, AC10, AC16, AC19
   - Tests: `ac6_addsAnActiveCardToTheCheckingAccount`, `ac6_addsAnActiveCardToTheSavingsAccount`, `ac6_holderNameComesFromTheRegisteredCustomer`, `ac10_weakPinOnAddIs422AndNoCardIsCreated`, `ac16_sixthNonBlockedCardIs409`, `ac16_blockedCardsDoNotCountTowardsTheLimit`, `ac16_concurrentAddsNeverExceedTheLimit`, `ac19_noAccountsYetIs404`, `unknownAccountTypeIs400`
 
-- [ ] **T10** — Route `/api/cards` through the gateway
+- [x] **T10** — Route `/api/cards` through the gateway
   - Files: `services/api-gateway/src/main/resources/application.yml`, `services/api-gateway/src/test/java/com/bankdash/gateway/GatewayIT.java`
   - Covers: AC18
   - Tests: `GatewayIT.cardRequestsGoToAccountService`, `GatewayIT.cardCommandsKeepMethodAndPath`, `GatewayIT.ac18_cardsWithoutTokenIs401`, `GatewayIT.ac18_cardsWithInvalidTokenIs401`
