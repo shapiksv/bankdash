@@ -58,8 +58,8 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC6 (request shape), AC10 (UI mirror of the rules)
   - Tests: `it('AC6: adds a card with accountType and pin')`, `it('AC10: flags <pin> as <rule>')` (same examples as `PinPolicyTest`), `it('AC10: accepts strong PINs')`
 
-- [ ] **T12** — Build the Credit Cards page: list, details and empty state
-  - Files: `apps/web/src/pages/CreditCardsPage.tsx`, `apps/web/src/cards/CardTile.tsx`, `apps/web/src/pages/CreditCardsPage.test.tsx`
+- [x] **T12** — Build the Credit Cards page: list, details and empty state
+  - Files: `apps/web/src/pages/CreditCardsPage.tsx`, `apps/web/src/cards/CardTile.tsx`, `apps/web/src/cards/status.ts`, `apps/web/src/pages/CreditCardsPage.test.tsx`
   - Covers: AC4, AC17
   - Tests: `it('AC17: lists all cards with masked numbers')`, `it('AC17: shows an empty state while cards are being prepared')`, `it('AC4: shows status, expiry and linked account in the details')`
 
