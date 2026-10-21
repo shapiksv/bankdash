@@ -28,7 +28,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC1, AC2
   - Tests: `ac1_opensCheckingSavingsAndAnInactiveDebitCard`, `ac1_failureRollsBackAndTheRetryCreatesEverything`, `ac2_duplicateEventIsIgnored`, `ac2_secondEventForTheSameUserCreatesNothing`, `poisonMessageLandsInTheDlt`, `eventWithoutUserIdLandsInTheDlt`
 
-- [ ] **T6** — List cards and show card details
+- [x] **T6** — List cards and show card details
   - Files: `app/CardService.java` (list, get), `domain/CardNotFoundException.java`, `api/CardController.java` (GET endpoints, `CardResponse`, `CardListResponse`), `api/CardExceptionHandler.java`, test `api/CardReadApiIT.java`
   - Covers: AC3, AC4, AC5, AC18
   - Tests: `ac3_listsOnlyOwnCardsWithMaskedNumbers`, `ac3_limitReturnsTheFirstCardsInCreationOrder`, `ac3_noCardsYetIsAnEmptyList`, `ac4_returnsCardDetails`, `ac4_reportsExpiredCardAsExpired`, `ac5_someoneElsesCardIs404LikeAMissingOne`, `ac18_requestWithoutTokenIs401ProblemDetail`

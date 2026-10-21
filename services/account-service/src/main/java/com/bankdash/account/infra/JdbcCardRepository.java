@@ -8,6 +8,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.YearMonth;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -31,6 +33,22 @@ class JdbcCardRepository implements CardRepository {
                         c.expiry().getMonthValue(), c.expiry().getYear(), c.pinHash(), c.status().name(),
                         Timestamp.from(c.createdAt()), Timestamp.from(c.updatedAt()))
                 .update();
+    }
+
+    @Override
+    public List<Card> findByUser(UUID userId, int limit) {
+        return jdbc.sql("SELECT * FROM card WHERE user_id = ? ORDER BY created_at, id LIMIT ?")
+                .params(userId, limit)
+                .query(JdbcCardRepository::map)
+                .list();
+    }
+
+    @Override
+    public Optional<Card> findOwned(UUID cardId, UUID userId) {
+        return jdbc.sql("SELECT * FROM card WHERE id = ? AND user_id = ?")
+                .params(cardId, userId)
+                .query(JdbcCardRepository::map)
+                .optional();
     }
 
     static Card map(ResultSet rs, int row) throws SQLException {
