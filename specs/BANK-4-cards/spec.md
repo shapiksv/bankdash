@@ -44,7 +44,7 @@ Builds on `docs/architecture.md`: account-service owns accounts and cards (§1) 
 10. A new card added by the user is created with a PIN and is ACTIVE immediately.
 11. Infrastructure:
   - new `services/account-service` on port 8083 with its own `account` database (already in `infra/postgres/init.sql`);
-  - gateway routes `/api/cards/**` and `/api/accounts/**` to account-service;
+  - gateway routes `/api/cards/**` to account-service;
   - `cards.status-changed.v1` and `cards.status-changed.v1.DLT` added to `infra/kafka/topics.txt`;
   - the `CardStatusChanged` payload record and topic constant added to `libs/events`.
 
@@ -58,6 +58,7 @@ Builds on `docs/architecture.md`: account-service owns accounts and cards (§1) 
   local confirmation message (toast).
 - Rate limiting of PIN changes (tracked in `docs/architecture.md` §7).
 - PIN check against the user's date of birth (see Q4).
+- Gateway route `/api/accounts/**` (comes with the Accounts ticket, together with its endpoints).
 
 ## User stories
 
@@ -92,13 +93,12 @@ Builds on `docs/architecture.md`: account-service owns accounts and cards (§1) 
   - **When** the user calls any `/api/cards/{id}...` endpoint for it
   - **Then** the response is 404, identical to the response for a non-existent card
 - **AC6** — Add a card
-  - **Given** a user owns an account
-  - **When** they call `POST /api/cards` with that accountId and a valid PIN
-  - **Then** the response is 201 with the new card: type DEBIT, status ACTIVE, linked to that account
-- **AC7** — Add a card to someone else's account
-  - **Given** an account that belongs to another user
-  - **When** the user calls `POST /api/cards` with that accountId
-  - **Then** the response is 404 and no card is created
+  - **Given** a user has a CHECKING and a SAVINGS account
+  - **When** they call `POST /api/cards` with an accountType (CHECKING or SAVINGS) and a valid PIN
+  - **Then** the response is 201 with the new card: type DEBIT, status ACTIVE, holder name = their registered
+    full name, linked to their own account of that type
+- **AC7** — Removed (see Q6: the request names an account type, so it always refers to the caller's own account;
+  AC19 covers a missing account)
 - **AC8** — Set the first PIN activates the card
   - **Given** a user owns an INACTIVE card without a PIN
   - **When** they call `PUT /api/cards/{id}/pin` with a valid PIN
@@ -143,6 +143,10 @@ Builds on `docs/architecture.md`: account-service owns accounts and cards (§1) 
   - **Given** no access token or an invalid one
   - **When** any `/api/cards...` endpoint is called through the gateway
   - **Then** the response is 401 ProblemDetail and nothing changes
+- **AC19** — Add a card before the accounts exist
+  - **Given** a user whose `auth.user-registered.v1` event has not been processed yet (no accounts)
+  - **When** they call `POST /api/cards` with any accountType
+  - **Then** the response is 404 and no card is created
 
 ## API contract
 
@@ -153,7 +157,7 @@ taken from the token (`sub`), never from the request.
 |---|---|---|---|---|
 | GET | /api/cards | `?limit=` (optional) | 200 `{ cards: [Card] }` | 401 |
 | GET | /api/cards/{id} | — | 200 `Card` | 401, 404 |
-| POST | /api/cards | `{ accountId, pin }` | 201 `Card` | 401, 404 (account not owned / not found), 409 (card limit), 422 (weak PIN) |
+| POST | /api/cards | `{ accountType, pin }` | 201 `Card` | 400 (missing or unknown accountType), 401, 404 (no account of that type yet), 409 (card limit), 422 (weak PIN) |
 | PUT | /api/cards/{id}/pin | `{ pin }` | 204 | 401, 404, 409 (blocked / expired), 422 (weak PIN or same as current) |
 | POST | /api/cards/{id}/block | — | 204 | 401, 404, 409 (already blocked) |
 
@@ -174,7 +178,7 @@ Card:
 Create card request:
 
 ```json
-{ "accountId": "0a9b8c7d-6e5f-4a3b-2c1d-0e9f8a7b6c5d", "pin": "4826" }
+{ "accountType": "SAVINGS", "pin": "4826" }
 ```
 
 Weak PIN error:
@@ -211,7 +215,9 @@ account-service database, Flyway migrations:
 - **card**: id (uuid, PK), user_id (uuid, not null), account_id (uuid, FK → account), type (DEBIT),
   holder_name, last4 (char(4)), expiry_month, expiry_year, pin_hash (nullable), status
   (INACTIVE | ACTIVE | BLOCKED), created_at, updated_at. Index on user_id.
-- **outbox** and **processed_event**: from `libs/messaging`.
+- **customer**: user_id (uuid, PK), full_name (not null), created_at. Created from `auth.user-registered.v1`;
+  the holder name of cards added later is taken from here (Q7).
+- **outbox_event** and **processed_event**: from `libs/messaging`.
 
 The unique (user_id, type) constraint on account is a second line of defence for AC2.
 
@@ -233,7 +239,8 @@ The unique (user_id, type) constraint on account is a second line of defence for
 |---|---|---|
 | Card belongs to another user | Same response as for a non-existent card | 404 |
 | Card does not exist | Error | 404 |
-| Account in "add card" belongs to another user | Same as non-existent account, no card created | 404 |
+| "Add card" before the user's accounts exist | No card created | 404 |
+| "Add card" with a missing or unknown accountType | Validation error | 400 |
 | Card is already blocked | No change, no event | 409 |
 | Change PIN on a blocked card | No change | 409 |
 | Change PIN on an expired card | No change | 409 |
@@ -261,3 +268,13 @@ The unique (user_id, type) constraint on account is a second line of defence for
    **Answer (PO):** (a) for this ticket, replaced by the generic "year 1950–2029" rule. Revisit later.
 5. Is there a limit on the number of cards per user?
    **Answer (PO):** Yes, at most 5 non-blocked cards per user.
+6. The Add card form picks CHECKING or SAVINGS (Q2), but no endpoint returns the user's account ids, so the
+   form cannot send an accountId for SAVINGS.
+   Options: (a) add `GET /api/accounts`; (b) `POST /api/cards` takes `accountType` instead of `accountId`;
+   (c) CHECKING only.
+   **Answer:** (b). `POST /api/cards` takes `{ accountType, pin }`; account-service resolves the caller's
+   account of that type. AC7 is removed, AC19 covers a missing account.
+7. Where does the holder name of a card added via `POST /api/cards` come from?
+   Options: (a) copy it from the registration card; (b) a `customer` table filled from
+   `auth.user-registered.v1`; (c) a `holderName` field in the request.
+   **Answer:** (b). account-service keeps `customer (user_id, full_name)`.
