@@ -53,8 +53,8 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC18
   - Tests: `GatewayIT.cardRequestsGoToAccountService`, `GatewayIT.cardCommandsKeepMethodAndPath`, `GatewayIT.ac18_cardsWithoutTokenIs401`, `GatewayIT.ac18_cardsWithInvalidTokenIs401`
 
-- [ ] **T11** — Add the web cards API, query hooks and PIN rules
-  - Files: `apps/web/src/api/cards.ts`, `apps/web/src/api/cards.test.ts`, `apps/web/src/cards/queries.ts`, `apps/web/src/cards/pinRules.ts`, `apps/web/src/cards/pinRules.test.ts`, `apps/web/src/test/renderWithAuth.tsx` (default `GET /api/cards`), `apps/web/src/test/users.ts` (card fixtures)
+- [x] **T11** — Add the web cards API, query hooks and PIN rules
+  - Files: `apps/web/src/api/cards.ts`, `apps/web/src/api/cards.test.ts`, `apps/web/src/cards/queries.ts`, `apps/web/src/cards/pinRules.ts`, `apps/web/src/cards/pinRules.test.ts`, `apps/web/src/test/renderWithAuth.tsx` (default `GET /api/cards`), `apps/web/src/test/users.ts` (card fixtures), `apps/web/src/auth/useUserId.ts` (moved out of `profile/queries.ts` to share it), `apps/web/src/api/client.ts` (`rule` on `Problem`)
   - Covers: AC6 (request shape), AC10 (UI mirror of the rules)
   - Tests: `it('AC6: adds a card with accountType and pin')`, `it('AC10: flags <pin> as <rule>')` (same examples as `PinPolicyTest`), `it('AC10: accepts strong PINs')`
 

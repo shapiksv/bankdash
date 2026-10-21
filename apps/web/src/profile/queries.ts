@@ -10,13 +10,7 @@ import {
   type Profile,
   type ProfileInput,
 } from '../api/profile'
-import { useAuth } from '../auth/useAuth'
-
-/** Keys include the user id, so nothing cached for one user is ever shown to the next one in this tab. */
-function useUserId(): string | undefined {
-  const { state } = useAuth()
-  return state.status === 'authenticated' ? state.user.id : undefined
-}
+import { useUserId } from '../auth/useUserId'
 
 export function useProfile() {
   const userId = useUserId()

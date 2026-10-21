@@ -1,4 +1,5 @@
 import type { CurrentUser } from '../api/auth'
+import type { Card } from '../api/cards'
 import type { Preferences, Profile } from '../api/profile'
 
 export const jane: CurrentUser = { id: 'u1', email: 'jane@example.com', twoFactorEnabled: false }
@@ -23,3 +24,20 @@ export const janePreferences: Preferences = {
   notifyOnMerchantOrders: false,
   notifyOnRecommendations: true,
 }
+
+const card = (id: string, last4: string, accountId: string, status: Card['status']): Card => ({
+  id,
+  accountId,
+  type: 'DEBIT',
+  maskedNumber: `**** **** **** ${last4}`,
+  holderName: 'Jane Doe',
+  expiry: '10/29',
+  status,
+})
+
+/** The registration card (no PIN yet), then two added ones. */
+export const janeCards: Card[] = [
+  card('c1', '5678', 'checking', 'INACTIVE'),
+  card('c2', '1234', 'savings', 'ACTIVE'),
+  card('c3', '9012', 'checking', 'ACTIVE'),
+]
