@@ -297,6 +297,10 @@ The unique (user_id, type) constraint on account is a second line of defence for
    **Answer (PO):** (1) The widget shows only non-blocked cards, newest first. The Credit Cards page lists
    non-blocked cards first (newest first), then blocked ones. (2) 400 ProblemDetail with detail
    "accountType must be CHECKING or SAVINGS". AC17 is updated, AC20 (order) and AC21 (account type) are added.
-   **Assumptions (not stated by the PO):** blocked cards are also listed newest first; "non-blocked" is the stored
-   status, as for the card limit (AC16), so an expired card counts as non-blocked; the order is applied by
-   `GET /api/cards`, so `limit` returns the first N of it, and the widget drops blocked cards from its 2.
+   Four details were first recorded as assumptions; the PO accepted all of them as-is:
+   - blocked cards are also listed newest first;
+   - "non-blocked" is the stored status, as for the card limit (AC16), so an expired card counts as non-blocked
+     (to be revisited in a separate ticket if ever needed);
+   - the order is applied by `GET /api/cards`, so `limit` returns the first N of it;
+   - the Dashboard widget drops blocked cards from its 2.
+   **Answer (PO, assumptions):** accepted as-is.
