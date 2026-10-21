@@ -8,7 +8,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC13 (event contract; publishing comes in T8)
   - Tests: `EventJsonTest.cardStatusChangedHasTheDocumentedShape`, `EventJsonTest.dltTopicNames` (extended)
 
-- [ ] **T2** — Scaffold account-service with its schema
+- [x] **T2** — Scaffold account-service with its schema
   - Files: `services/account-service/build.gradle.kts`, `src/main/resources/application.yml`, `src/main/resources/db/migration/V1__accounts_and_cards.sql`, `src/main/java/com/bankdash/account/AccountServiceApplication.java`, `infra/ClockConfig.java`, `infra/PinHashingConfig.java`, test `AccountIT.java` (base class: containers, TestJwtIssuer, `register(...)` helper), `AccountServiceApplicationIT.java`
   - Covers: — (infrastructure: the service, its database schema with `customer`/`account`/`card`/`outbox_event`/`processed_event`, and the test base every later backend task needs)
   - Tests: `AccountServiceApplicationIT.contextLoadsAndMigrationsApply`
