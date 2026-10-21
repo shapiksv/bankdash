@@ -38,7 +38,10 @@ class CardController {
         this.cards = cards;
     }
 
-    /** The Dashboard asks for {@code limit=2}; the Credit Cards page for all of them. */
+    /**
+     * Non-blocked cards newest first, then blocked ones. The Dashboard asks for {@code limit=2} (and leaves out
+     * blocked cards); the Credit Cards page for all of them.
+     */
     @GetMapping
     CardListResponse list(@CurrentUser UUID userId, @RequestParam @Min(1) @Max(100) @Nullable Integer limit) {
         YearMonth today = cards.today();

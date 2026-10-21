@@ -8,7 +8,7 @@ public interface CardRepository {
 
     void insert(Card card);
 
-    /** The user's cards, oldest first, at most {@code limit}. */
+    /** The user's cards, at most {@code limit}: non-blocked ones newest first, then blocked ones newest first. */
     List<Card> findByUser(UUID userId, int limit);
 
     /** Empty if the card does not exist or belongs to another user. */

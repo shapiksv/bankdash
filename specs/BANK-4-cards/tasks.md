@@ -83,7 +83,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: — (keeps the commands and repository structure accurate now that a third service exists)
   - Tests: none (docs only); `./gradlew build` and `npm test` stay green
 
-- [ ] **T17** — Order cards: non-blocked newest first, then blocked (CR-1)
+- [x] **T17** — Order cards: non-blocked newest first, then blocked (CR-1)
   - Files: `infra/JdbcCardRepository.java`, `domain/CardRepository.java`, `app/CardService.java` (Javadoc), `api/CardController.java` (Javadoc), test `api/CardReadApiIT.java`
   - Covers: AC20, AC17 (the server half: `limit` returns the newest non-blocked cards first)
   - Tests: `ac20_nonBlockedNewestFirstThenBlockedNewestFirst`, `ac20_limitReturnsTheFirstCardsOfThatOrder` (replaces `ac3_limitReturnsTheFirstCardsInCreationOrder`)

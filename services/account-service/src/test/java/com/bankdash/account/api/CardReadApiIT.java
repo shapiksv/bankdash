@@ -39,33 +39,58 @@ class CardReadApiIT extends AccountIT {
                 .doesNotContainPattern("[0-9]{16}");
     }
 
-    @Test
-    void ac3_limitReturnsTheFirstCardsInCreationOrder() {
-        UUID jane = registeredUser("Jane Doe");
-        UUID first = (UUID) cardRow(jane).get("id");
-        UUID account = (UUID) cardRow(jane).get("account_id");
-        for (int i = 1; i <= 2; i++) {
-            jdbc.sql("""
-                            INSERT INTO card (id, user_id, account_id, type, holder_name, last4, expiry_month, expiry_year,
-                                pin_hash, status, created_at, updated_at)
-                            VALUES (?, ?, ?, 'DEBIT', 'Jane Doe', '000' || ?, 1, 2099, 'hash', 'ACTIVE',
-                                now() + make_interval(secs => ?), now())""")
-                    .params(UUID.randomUUID(), jane, account, i, i)
-                    .update();
-        }
-
-        var all = get(jane, "/cards");
-        var two = get(jane, "/cards?limit=2");
-
-        assertThat(all).bodyJson().extractingPath("$.cards[*].maskedNumber").asArray().hasSize(3);
-        assertThat(two).bodyJson().extractingPath("$.cards[*].maskedNumber").asArray()
-                .containsExactly("**** **** **** " + last4Of(first), "**** **** **** 0001");
-        assertThat(get(jane, "/cards?limit=0")).hasStatus(HttpStatus.BAD_REQUEST);
-        assertThat(get(jane, "/cards?limit=101")).hasStatus(HttpStatus.BAD_REQUEST);
+    /** Adds a card created {@code secondsLater} after now, so the tests control the creation order. */
+    void insertCard(UUID userId, UUID accountId, String last4, String status, int secondsLater) {
+        jdbc.sql("""
+                        INSERT INTO card (id, user_id, account_id, type, holder_name, last4, expiry_month, expiry_year,
+                            pin_hash, status, created_at, updated_at)
+                        VALUES (?, ?, ?, 'DEBIT', 'Jane Doe', ?, 1, 2099, 'hash', ?,
+                            now() + make_interval(secs => ?), now())""")
+                .params(UUID.randomUUID(), userId, accountId, last4, status, secondsLater)
+                .update();
     }
 
-    String last4Of(UUID cardId) {
-        return jdbc.sql("SELECT last4 FROM card WHERE id = ?").param(cardId).query(String.class).single();
+    /** A user whose INACTIVE registration card is the oldest, followed by BLOCKED/ACTIVE cards in turn. */
+    record MixedCards(UUID userId, String registrationLast4) {}
+
+    MixedCards userWithMixedCards() {
+        UUID jane = registeredUser("Jane Doe");
+        var registration = cardRow(jane);
+        UUID account = (UUID) registration.get("account_id");
+        insertCard(jane, account, "0001", "BLOCKED", 1);
+        insertCard(jane, account, "0002", "ACTIVE", 2);
+        insertCard(jane, account, "0003", "BLOCKED", 3);
+        insertCard(jane, account, "0004", "ACTIVE", 4);
+        return new MixedCards(jane, (String) registration.get("last4"));
+    }
+
+    static String masked(String last4) {
+        return "**** **** **** " + last4;
+    }
+
+    @Test
+    void ac20_nonBlockedNewestFirstThenBlockedNewestFirst() {
+        MixedCards jane = userWithMixedCards();
+
+        var response = get(jane.userId(), "/cards");
+
+        assertThat(response).hasStatusOk();
+        assertThat(response).bodyJson().extractingPath("$.cards[*].maskedNumber").asArray().containsExactly(
+                masked("0004"), masked("0002"), masked(jane.registrationLast4()), masked("0003"), masked("0001"));
+        assertThat(response).bodyJson().extractingPath("$.cards[*].status").asArray()
+                .containsExactly("ACTIVE", "ACTIVE", "INACTIVE", "BLOCKED", "BLOCKED");
+    }
+
+    @Test
+    void ac20_limitReturnsTheFirstCardsOfThatOrder() {
+        MixedCards jane = userWithMixedCards();
+
+        assertThat(get(jane.userId(), "/cards?limit=2")).bodyJson().extractingPath("$.cards[*].maskedNumber").asArray()
+                .containsExactly(masked("0004"), masked("0002"));
+        assertThat(get(jane.userId(), "/cards?limit=4")).bodyJson().extractingPath("$.cards[*].maskedNumber").asArray()
+                .containsExactly(masked("0004"), masked("0002"), masked(jane.registrationLast4()), masked("0003"));
+        assertThat(get(jane.userId(), "/cards?limit=0")).hasStatus(HttpStatus.BAD_REQUEST);
+        assertThat(get(jane.userId(), "/cards?limit=101")).hasStatus(HttpStatus.BAD_REQUEST);
     }
 
     @Test

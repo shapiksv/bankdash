@@ -57,7 +57,7 @@ public class CardService {
         this.clock = clock;
     }
 
-    /** @param limit at most this many cards, oldest first; all of them if null */
+    /** @param limit at most this many cards, non-blocked newest first, then blocked; all of them if null */
     public List<Card> list(UUID userId, @Nullable Integer limit) {
         return cards.findByUser(userId, limit == null ? Integer.MAX_VALUE : limit);
     }

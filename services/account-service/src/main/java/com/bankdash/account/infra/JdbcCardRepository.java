@@ -37,7 +37,10 @@ class JdbcCardRepository implements CardRepository {
 
     @Override
     public List<Card> findByUser(UUID userId, int limit) {
-        return jdbc.sql("SELECT * FROM card WHERE user_id = ? ORDER BY created_at, id LIMIT ?")
+        return jdbc.sql("""
+                        SELECT * FROM card WHERE user_id = ?
+                        ORDER BY status = 'BLOCKED', created_at DESC, id DESC
+                        LIMIT ?""")
                 .params(userId, limit)
                 .query(JdbcCardRepository::map)
                 .list();
