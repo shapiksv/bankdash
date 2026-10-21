@@ -68,8 +68,8 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC15, AC13 (UI)
   - Tests: `it('AC15: sends the block request only after Confirm')`, `it('AC15: Cancel sends no request')`, `it('AC13: shows the card as blocked and a confirmation message')`
 
-- [ ] **T14** — Add the Set/Change PIN and Add card dialogs
-  - Files: `apps/web/src/cards/PinDialog.tsx`, `apps/web/src/cards/AddCardDialog.tsx`, `apps/web/src/pages/CreditCardsPage.tsx`, `apps/web/src/pages/CreditCardsPage.test.tsx`
+- [x] **T14** — Add the Set/Change PIN and Add card dialogs
+  - Files: `apps/web/src/cards/PinDialog.tsx`, `apps/web/src/cards/AddCardDialog.tsx`, `apps/web/src/cards/Modal.tsx` (shared by the three dialogs), `apps/web/src/pages/CreditCardsPage.tsx`, `apps/web/src/pages/CreditCardsPage.test.tsx`
   - Covers: AC6, AC8, AC9, AC10
   - Tests: `it('AC8: offers Set PIN for an inactive card and shows it active after saving')`, `it('AC9: changes the PIN of an active card')`, `it('AC10: blocks a weak PIN before sending')`, `it('AC10: shows the backend rule detail on 422')`, `it('AC6: adds a card to the chosen account')`
 
