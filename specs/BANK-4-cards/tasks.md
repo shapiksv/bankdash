@@ -13,7 +13,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: — (infrastructure: the service, its database schema with `customer`/`account`/`card`/`outbox_event`/`processed_event`, and the test base every later backend task needs)
   - Tests: `AccountServiceApplicationIT.contextLoadsAndMigrationsApply`
 
-- [ ] **T3** — Implement the PIN policy
+- [x] **T3** — Implement the PIN policy
   - Files: `domain/PinPolicy.java`, `domain/PinRule.java`, `domain/WeakPinException.java`, test `domain/PinPolicyTest.java`
   - Covers: AC10, AC11 (the `SAME_AS_CURRENT` rule code; it is enforced in T7)
   - Tests: `PinPolicyTest.ac10_rejectsWeakPin` (parameterized over every rule and the spec's examples, asserting the rule), `PinPolicyTest.ac10_acceptsStrongPin`, `PinPolicyTest.ac10_rulesAreCheckedInSpecOrder`
