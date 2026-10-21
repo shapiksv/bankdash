@@ -51,6 +51,21 @@ class JdbcCardRepository implements CardRepository {
                 .optional();
     }
 
+    @Override
+    public Optional<Card> lockOwned(UUID cardId, UUID userId) {
+        return jdbc.sql("SELECT * FROM card WHERE id = ? AND user_id = ? FOR UPDATE")
+                .params(cardId, userId)
+                .query(JdbcCardRepository::map)
+                .optional();
+    }
+
+    @Override
+    public void update(Card c) {
+        jdbc.sql("UPDATE card SET pin_hash = ?, status = ?, updated_at = ? WHERE id = ?")
+                .params(c.pinHash(), c.status().name(), Timestamp.from(c.updatedAt()), c.id())
+                .update();
+    }
+
     static Card map(ResultSet rs, int row) throws SQLException {
         return new Card(
                 rs.getObject("id", UUID.class),

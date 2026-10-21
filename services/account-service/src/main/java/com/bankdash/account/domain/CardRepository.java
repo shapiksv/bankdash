@@ -13,4 +13,10 @@ public interface CardRepository {
 
     /** Empty if the card does not exist or belongs to another user. */
     Optional<Card> findOwned(UUID cardId, UUID userId);
+
+    /** Like {@link #findOwned}, and locks the card until the transaction ends. */
+    Optional<Card> lockOwned(UUID cardId, UUID userId);
+
+    /** Saves the PIN hash, status and updatedAt of an existing card. */
+    void update(Card card);
 }

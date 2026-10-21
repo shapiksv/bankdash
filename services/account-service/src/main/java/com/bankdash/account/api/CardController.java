@@ -7,15 +7,21 @@ import com.bankdash.account.domain.CardStatus;
 import com.bankdash.account.domain.CardType;
 import com.bankdash.web.CurrentUser;
 import jakarta.validation.constraints.Max;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.UUID;
 import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -39,6 +45,15 @@ class CardController {
     CardResponse get(@CurrentUser UUID userId, @PathVariable UUID id) {
         return CardResponse.of(cards.get(userId, id), cards.today());
     }
+
+    /** 204; the PIN rules are checked by the service (422), so the request only needs a value. */
+    @PutMapping("/{id}/pin")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void setPin(@CurrentUser UUID userId, @PathVariable UUID id, @Valid @RequestBody SetPinRequest request) {
+        cards.setPin(userId, id, request.pin());
+    }
+
+    record SetPinRequest(@NotNull String pin) {}
 
     record CardListResponse(List<CardResponse> cards) {}
 

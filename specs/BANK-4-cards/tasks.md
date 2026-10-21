@@ -33,7 +33,7 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: AC3, AC4, AC5, AC18
   - Tests: `ac3_listsOnlyOwnCardsWithMaskedNumbers`, `ac3_limitReturnsTheFirstCardsInCreationOrder`, `ac3_noCardsYetIsAnEmptyList`, `ac4_returnsCardDetails`, `ac4_reportsExpiredCardAsExpired`, `ac5_someoneElsesCardIs404LikeAMissingOne`, `ac18_requestWithoutTokenIs401ProblemDetail`
 
-- [ ] **T7** — Set and change the PIN
+- [x] **T7** — Set and change the PIN
   - Files: `app/CardService.java` (setPin), `domain/CardNotUsableException.java`, `api/CardController.java` (PUT `/cards/{id}/pin`, `SetPinRequest`), `api/CardExceptionHandler.java` (422 with `rule`, 409), test `api/CardPinApiIT.java`
   - Covers: AC5, AC8, AC9, AC10, AC11, AC12
   - Tests: `ac8_firstPinActivatesTheCardAndIsStoredHashed`, `ac9_changesThePin`, `ac10_weakPinIs422WithTheRuleAndPinUnchanged` (parameterized: 0000, 1234, 9876, 1212, 1998, 2580, abcd, 123), `ac11_samePinAsCurrentIs422`, `ac12_blockedCardIs409`, `ac12_expiredCardIs409`, `ac5_someoneElsesCardIs404`
