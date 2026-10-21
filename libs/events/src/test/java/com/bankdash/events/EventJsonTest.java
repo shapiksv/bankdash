@@ -28,6 +28,18 @@ class EventJsonTest {
     }
 
     @Test
+    void ac13_cardStatusChangedHasTheDocumentedShape() {
+        UUID cardId = UUID.fromString("00000000-0000-0000-0000-0000000000c1");
+        var blocked = new EventEnvelope<>(eventId, CardStatusChanged.TYPE, CardStatusChanged.SCHEMA_VERSION,
+                "account-service", Instant.parse("2026-10-21T10:00:00Z"), new CardStatusChanged(cardId, userId, "BLOCKED"));
+
+        assertThat(json.writeValueAsString(blocked)).isEqualTo("""
+                {"eventId":"00000000-0000-0000-0000-00000000000e","eventType":"CardStatusChanged","schemaVersion":1,\
+                "source":"account-service","occurredAt":"2026-10-21T10:00:00Z","payload":{"cardId":"00000000-0000-0000-0000-0000000000c1",\
+                "userId":"00000000-0000-0000-0000-000000000001","status":"BLOCKED"}}""");
+    }
+
+    @Test
     void roundTrips() {
         String text = json.writeValueAsString(envelope);
 
@@ -37,6 +49,7 @@ class EventJsonTest {
     @Test
     void dltTopicNames() {
         assertThat(Topics.dlt(Topics.AUTH_USER_REGISTERED)).isEqualTo("auth.user-registered.v1.DLT");
+        assertThat(Topics.dlt(Topics.CARDS_STATUS_CHANGED)).isEqualTo("cards.status-changed.v1.DLT");
     }
 
     @Test

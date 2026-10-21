@@ -3,7 +3,7 @@
 Each task is roughly one commit that compiles and passes `./gradlew test` (and `npm test` for web tasks) on its
 own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for the ACs.
 
-- [ ] **T1** — Add the `cards.status-changed.v1` event contract and topics
+- [x] **T1** — Add the `cards.status-changed.v1` event contract and topics
   - Files: `libs/events/src/main/java/com/bankdash/events/CardStatusChanged.java`, `libs/events/src/main/java/com/bankdash/events/Topics.java`, `libs/events/src/test/java/com/bankdash/events/EventJsonTest.java`, `infra/kafka/topics.txt`
   - Covers: AC13 (event contract; publishing comes in T8)
   - Tests: `EventJsonTest.cardStatusChangedHasTheDocumentedShape`, `EventJsonTest.dltTopicNames` (extended)
