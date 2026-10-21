@@ -83,6 +83,21 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
   - Covers: — (keeps the commands and repository structure accurate now that a third service exists)
   - Tests: none (docs only); `./gradlew build` and `npm test` stay green
 
+- [ ] **T17** — Order cards: non-blocked newest first, then blocked (CR-1)
+  - Files: `infra/JdbcCardRepository.java`, `domain/CardRepository.java`, `app/CardService.java` (Javadoc), `api/CardController.java` (Javadoc), test `api/CardReadApiIT.java`
+  - Covers: AC20, AC17 (the server half: `limit` returns the newest non-blocked cards first)
+  - Tests: `ac20_nonBlockedNewestFirstThenBlockedNewestFirst`, `ac20_limitReturnsTheFirstCardsOfThatOrder` (replaces `ac3_limitReturnsTheFirstCardsInCreationOrder`)
+
+- [ ] **T18** — Show only non-blocked cards in the Dashboard widget (CR-1)
+  - Files: `apps/web/src/cards/MyCardsWidget.tsx`, `apps/web/src/pages/DashboardPage.test.tsx`, `apps/web/src/pages/CreditCardsPage.test.tsx`
+  - Covers: AC17, AC20 (UI)
+  - Tests: `it('AC17: shows at most 2 cards with masked numbers')` (updated), `it('AC17: never shows a blocked card')`, `it('AC17: says so when every card is blocked')`, `it('AC20: lists the cards in the order the API returns them')`
+
+- [ ] **T19** — Answer a missing or unknown accountType with the CR-1 400 detail
+  - Files: `api/CardController.java` (`AddCardRequest.accountType` as String), `api/InvalidAccountTypeException.java`, `api/CardExceptionHandler.java`, `domain/AccountType.java` (`parse`), test `api/AddCardApiIT.java`
+  - Covers: AC21
+  - Tests: `ac21_unknownAccountTypeIs400WithTheDetail`, `ac21_missingAccountTypeIs400WithTheDetail` (replace `unknownAccountTypeIs400`)
+
 ## AC → tasks coverage
 
 | AC | Tasks |
@@ -103,8 +118,10 @@ own. See [plan.md](plan.md) for the design (D1–D15) and [spec.md](spec.md) for
 | AC14 | T8 |
 | AC15 | T13 |
 | AC16 | T9 |
-| AC17 | T12, T15 |
+| AC17 | T12, T15, T17, T18 |
 | AC18 | T6, T10 |
 | AC19 | T9 |
+| AC20 | T17, T18 |
+| AC21 | T19 |
 
-Every active AC (AC1–AC6, AC8–AC19) is covered by at least one task. AC7 is marked Removed in the spec.
+T17–T19 come from the PO change request CR-1 (spec Q8). Every active AC (AC1–AC6, AC8–AC21) is covered by at least one task. AC7 is marked Removed in the spec.
