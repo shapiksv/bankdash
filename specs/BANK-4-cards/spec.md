@@ -1,6 +1,6 @@
 # BANK-4: Cards and accounts for new customers
 
-- **Status:** Reviewed
+- **Status:** Verified
 - **Services:** services/account-service (new), services/api-gateway, libs/events, infra/kafka, apps/web
 
 ## Context
@@ -29,7 +29,8 @@ Builds on `docs/architecture.md`: account-service owns accounts and cards (§1) 
 4. Card status: INACTIVE (no PIN yet), ACTIVE, BLOCKED. A card whose expiry is in the past is
    reported as EXPIRED (derived on read, not stored).
 5. Credit Cards page: list of the user's cards, card details, Add card, Block card, Set/Change PIN.
-6. Dashboard "My Cards" widget shows up to 2 of the user's cards.
+   Non-blocked cards come first, newest first, then blocked cards, newest first (CR-1).
+6. Dashboard "My Cards" widget shows up to 2 of the user's non-blocked cards, newest first (CR-1).
 7. Card numbers are always masked: only the last 4 digits are shown (`**** **** **** 5678`).
 8. Blocking requires an explicit confirmation step in the UI.
 9. PIN rules (validated on the backend; the frontend repeats them only for convenience).
@@ -138,7 +139,8 @@ Builds on `docs/architecture.md`: account-service owns accounts and cards (§1) 
 - **AC17** — Cards are shown in the UI
   - **Given** a logged-in user with cards
   - **When** they open the Credit Cards page and the Dashboard
-  - **Then** the Credit Cards page lists all their cards, and the Dashboard "My Cards" widget shows up to 2 of them, with masked numbers
+  - **Then** the Credit Cards page lists all their cards in the AC20 order, and the Dashboard "My Cards" widget
+    shows up to 2 of their non-blocked cards, newest first, never a blocked one; all with masked numbers (CR-1)
 - **AC18** — Requests without a token are rejected
   - **Given** no access token or an invalid one
   - **When** any `/api/cards...` endpoint is called through the gateway
@@ -147,6 +149,16 @@ Builds on `docs/architecture.md`: account-service owns accounts and cards (§1) 
   - **Given** a user whose `auth.user-registered.v1` event has not been processed yet (no accounts)
   - **When** they call `POST /api/cards` with any accountType
   - **Then** the response is 404 and no card is created
+- **AC20** — Card order (CR-1)
+  - **Given** a user with several non-blocked and blocked cards created at different times
+  - **When** they call `GET /api/cards` (with or without `limit`)
+  - **Then** the non-blocked cards come first, newest first, followed by the blocked cards, newest first;
+    `limit` returns the first N cards of that order
+- **AC21** — Missing or unknown account type (CR-1)
+  - **Given** a logged-in user
+  - **When** they call `POST /api/cards` without an accountType or with a value other than CHECKING or SAVINGS
+  - **Then** the response is 400 ProblemDetail with detail "accountType must be CHECKING or SAVINGS"
+    and no card is created
 
 ## API contract
 
@@ -155,9 +167,9 @@ taken from the token (`sub`), never from the request.
 
 | Method | Path | Request | Response | Errors (ProblemDetail) |
 |---|---|---|---|---|
-| GET | /api/cards | `?limit=` (optional) | 200 `{ cards: [Card] }` | 401 |
+| GET | /api/cards | `?limit=` (optional, 1–100) | 200 `{ cards: [Card] }`, ordered as in AC20 | 401 |
 | GET | /api/cards/{id} | — | 200 `Card` | 401, 404 |
-| POST | /api/cards | `{ accountType, pin }` | 201 `Card` | 400 (missing or unknown accountType), 401, 404 (no account of that type yet), 409 (card limit), 422 (weak PIN) |
+| POST | /api/cards | `{ accountType, pin }` | 201 `Card` | 400 (missing or unknown accountType, detail "accountType must be CHECKING or SAVINGS"), 401, 404 (no account of that type yet), 409 (card limit), 422 (weak PIN) |
 | PUT | /api/cards/{id}/pin | `{ pin }` | 204 | 401, 404, 409 (blocked / expired), 422 (weak PIN or same as current) |
 | POST | /api/cards/{id}/block | — | 204 | 401, 404, 409 (already blocked) |
 
@@ -240,7 +252,8 @@ The unique (user_id, type) constraint on account is a second line of defence for
 | Card belongs to another user | Same response as for a non-existent card | 404 |
 | Card does not exist | Error | 404 |
 | "Add card" before the user's accounts exist | No card created | 404 |
-| "Add card" with a missing or unknown accountType | Validation error | 400 |
+| "Add card" with a missing or unknown accountType | No card created; detail "accountType must be CHECKING or SAVINGS" | 400 |
+| User has only blocked cards | Dashboard "My Cards" shows none of them; the Credit Cards page lists them | 200 |
 | Card is already blocked | No change, no event | 409 |
 | Change PIN on a blocked card | No change | 409 |
 | Change PIN on an expired card | No change | 409 |
@@ -278,3 +291,16 @@ The unique (user_id, type) constraint on account is a second line of defence for
    Options: (a) copy it from the registration card; (b) a `customer` table filled from
    `auth.user-registered.v1`; (c) a `holderName` field in the request.
    **Answer:** (b). account-service keeps `customer (user_id, full_name)`.
+8. **CR-1 (change request from the PO, after the first verification):** (1) Which cards does the Dashboard
+   "My Cards" widget show, and in what order does the Credit Cards page list cards? (2) What does an unknown
+   or missing accountType on `POST /api/cards` return?
+   **Answer (PO):** (1) The widget shows only non-blocked cards, newest first. The Credit Cards page lists
+   non-blocked cards first (newest first), then blocked ones. (2) 400 ProblemDetail with detail
+   "accountType must be CHECKING or SAVINGS". AC17 is updated, AC20 (order) and AC21 (account type) are added.
+   Four details were first recorded as assumptions; the PO accepted all of them as-is:
+   - blocked cards are also listed newest first;
+   - "non-blocked" is the stored status, as for the card limit (AC16), so an expired card counts as non-blocked
+     (to be revisited in a separate ticket if ever needed);
+   - the order is applied by `GET /api/cards`, so `limit` returns the first N of it;
+   - the Dashboard widget drops blocked cards from its 2.
+   **Answer (PO, assumptions):** accepted as-is.

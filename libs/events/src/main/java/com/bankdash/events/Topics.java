@@ -9,6 +9,9 @@ public final class Topics {
     /** Key: userId. Payload: {@link UserRegistered}. */
     public static final String AUTH_USER_REGISTERED = "auth.user-registered.v1";
 
+    /** Key: cardId. Payload: {@link CardStatusChanged}. */
+    public static final String CARDS_STATUS_CHANGED = "cards.status-changed.v1";
+
     private Topics() {}
 
     /** The dead letter topic that consumers' failed records of {@code topic} go to. */
