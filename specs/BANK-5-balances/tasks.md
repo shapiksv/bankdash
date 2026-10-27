@@ -33,7 +33,7 @@ own. See [plan.md](plan.md) for the design (D1–D8) and [spec.md](spec.md) for 
   - Covers: AC12, AC10 (the error state after the timeout)
   - Tests: `it('AC12: polls every 2 seconds and stops once READY')`, `it('AC12: stops polling after 30 seconds and shows the error')`, `it('AC12: Retry after the timeout starts polling again')`
 
-- [ ] **T7** — Document the balance summary in CLAUDE.md
+- [x] **T7** — Document the balance summary in CLAUDE.md
   - Files: `CLAUDE.md`
   - Covers: — (keeps the repository structure accurate: account-service now also serves the balance summary)
   - Tests: none (docs only); `./gradlew build` and `npm test` stay green
