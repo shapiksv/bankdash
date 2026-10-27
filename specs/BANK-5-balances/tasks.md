@@ -8,7 +8,7 @@ own. See [plan.md](plan.md) for the design (D1–D8) and [spec.md](spec.md) for 
   - Covers: AC1, AC3, AC4, AC11 (the rules; the endpoint comes in T2)
   - Tests: `AccountSummaryTest.ac1_readyWithCheckingAsMyBalanceAndSavingsAsTotalSaving`, `ac3_zeroBalancesAreReady`, `ac4_noAccountsIsPending`, `ac11_onlyCheckingIsPending`, `ac11_onlySavingsIsPending`
 
-- [ ] **T2** — Serve `GET /accounts/summary` with amounts as exact strings
+- [x] **T2** — Serve `GET /accounts/summary` with amounts as exact strings
   - Files: `app/AccountService.java` (`summary`), `api/AccountController.java` (new, `AccountSummaryResponse`), test `api/AccountSummaryApiIT.java`
   - Covers: AC1, AC2, AC3, AC4, AC5, AC6, AC11
   - Tests: `ac1_returnsCheckingAndSavingsBalances`, `ac2_amountsAreExactJsonStrings`, `ac3_newCustomerHasZeroBalances`, `ac4_unknownCustomerIsPendingWithNullAmounts`, `ac5_eachCustomerSeesOnlyTheirOwnBalances`, `ac6_requestWithoutTokenIs401ProblemDetail`, `ac6_requestWithInvalidTokenIs401ProblemDetail`, `ac11_onlyCheckingAccountIsPending`

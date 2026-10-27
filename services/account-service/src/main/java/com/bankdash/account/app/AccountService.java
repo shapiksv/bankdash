@@ -2,6 +2,7 @@ package com.bankdash.account.app;
 
 import com.bankdash.account.domain.Account;
 import com.bankdash.account.domain.AccountRepository;
+import com.bankdash.account.domain.AccountSummary;
 import com.bankdash.account.domain.AccountType;
 import com.bankdash.account.domain.Card;
 import com.bankdash.account.domain.CardRepository;
@@ -10,6 +11,7 @@ import com.bankdash.account.domain.CustomerRepository;
 import com.bankdash.events.UserRegistered;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -53,5 +55,10 @@ public class AccountService {
         Card card = issuer.issue(event.userId(), checking.id(), event.fullName(), null);
         cards.insert(card);
         log.info("Opened accounts and card {} for user {}", card.id(), event.userId());
+    }
+
+    /** The Accounts page's balances; PENDING while the user's accounts are not opened yet. */
+    public AccountSummary summary(UUID userId) {
+        return AccountSummary.of(accounts.findByUser(userId));
     }
 }
