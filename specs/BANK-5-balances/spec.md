@@ -1,6 +1,6 @@
 # BANK-5: Account balances on the Accounts page
 
-- **Status:** Reviewed
+- **Status:** Verified
 - **Services:** services/account-service, services/api-gateway, apps/web
 
 ## Context
