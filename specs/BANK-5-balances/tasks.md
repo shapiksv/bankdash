@@ -3,7 +3,7 @@
 Each task is roughly one commit that compiles and passes `./gradlew test` (and `npm test` for web tasks) on its
 own. See [plan.md](plan.md) for the design (D1–D8) and [spec.md](spec.md) for the ACs.
 
-- [ ] **T1** — Derive the account summary from a user's accounts
+- [x] **T1** — Derive the account summary from a user's accounts
   - Files: `services/account-service/src/main/java/com/bankdash/account/domain/AccountSummary.java`, `domain/AccountRepository.java` (`findByUser`), `infra/JdbcAccountRepository.java` (`findByUser`), test `domain/AccountSummaryTest.java`
   - Covers: AC1, AC3, AC4, AC11 (the rules; the endpoint comes in T2)
   - Tests: `AccountSummaryTest.ac1_readyWithCheckingAsMyBalanceAndSavingsAsTotalSaving`, `ac3_zeroBalancesAreReady`, `ac4_noAccountsIsPending`, `ac11_onlyCheckingIsPending`, `ac11_onlySavingsIsPending`
