@@ -47,7 +47,7 @@ spring:
             - id: account-service
               uri: ${bankdash.services.account}
               predicates:
-                - Path=/api/cards/**
+                - Path=/api/cards/**,/api/accounts/**
               filters:
                 - StripPrefix=1
 

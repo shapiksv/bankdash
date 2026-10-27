@@ -245,6 +245,31 @@ class GatewayIT {
     }
 
     @Test
+    void ac1_accountRequestsGoToAccountService() throws Exception {
+        String token = issuer.token(user);
+
+        var response = send(request("/api/accounts/summary").header("Authorization", "Bearer " + token));
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(accountService.lastRequest.get().method()).isEqualTo("GET");
+        assertThat(accountService.lastRequest.get().path()).isEqualTo("/accounts/summary");
+        assertThat(accountService.lastRequest.get().authorization()).isEqualTo("Bearer " + token);
+        assertThat(profileService.lastRequest.get()).isNull();
+    }
+
+    @Test
+    void ac6_accountsWithoutTokenIs401() throws Exception {
+        assertRejected(send(request("/api/accounts/summary")));
+        assertThat(accountService.lastRequest.get()).as("request must not reach account-service").isNull();
+    }
+
+    @Test
+    void ac6_accountsWithInvalidTokenIs401() throws Exception {
+        assertRejected(send(request("/api/accounts/summary").header("Authorization", "Bearer " + issuer.expiredToken(user))));
+        assertThat(accountService.lastRequest.get()).as("request must not reach account-service").isNull();
+    }
+
+    @Test
     void corsPreflightFromTheWebAppIsAllowedWithCredentials() throws Exception {
         var response = send(request("/api/auth/me")
                 .method("OPTIONS", HttpRequest.BodyPublishers.noBody())

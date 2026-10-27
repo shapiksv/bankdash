@@ -13,7 +13,7 @@ own. See [plan.md](plan.md) for the design (D1–D8) and [spec.md](spec.md) for 
   - Covers: AC1, AC2, AC3, AC4, AC5, AC6, AC11
   - Tests: `ac1_returnsCheckingAndSavingsBalances`, `ac2_amountsAreExactJsonStrings`, `ac3_newCustomerHasZeroBalances`, `ac4_unknownCustomerIsPendingWithNullAmounts`, `ac5_eachCustomerSeesOnlyTheirOwnBalances`, `ac6_requestWithoutTokenIs401ProblemDetail`, `ac6_requestWithInvalidTokenIs401ProblemDetail`, `ac11_onlyCheckingAccountIsPending`
 
-- [ ] **T3** — Route `/api/accounts/**` through the gateway
+- [x] **T3** — Route `/api/accounts/**` through the gateway
   - Files: `services/api-gateway/src/main/resources/application.yml`, `services/api-gateway/src/test/java/com/bankdash/gateway/GatewayIT.java`
   - Covers: AC1 (through the gateway), AC6
   - Tests: `GatewayIT.ac1_accountRequestsGoToAccountService`, `GatewayIT.ac6_accountsWithoutTokenIs401`, `GatewayIT.ac6_accountsWithInvalidTokenIs401`
