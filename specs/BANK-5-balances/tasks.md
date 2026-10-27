@@ -23,7 +23,7 @@ own. See [plan.md](plan.md) for the design (D1–D8) and [spec.md](spec.md) for 
   - Covers: AC7, AC8 (formatting)
   - Tests: `it('AC7: formats 1250.50 as $1,250.50')`, `it('AC7: formats 300.00 and 0.00')`, `it('AC8: formats 12345678901234.89 exactly')`, `it('groups at every thousand')` (999.99, 1000.00), `it('rejects malformed amounts')`
 
-- [ ] **T5** — Show My Balance and Total Saving on the Accounts page
+- [x] **T5** — Show My Balance and Total Saving on the Accounts page
   - Files: `apps/web/src/accounts/queries.ts` (`useAccountSummary` with loading / ready / pending / error and `retry`, no polling yet), `apps/web/src/accounts/KpiCard.tsx`, `apps/web/src/accounts/BalanceKpis.tsx`, `apps/web/src/pages/AccountsPage.tsx`, `apps/web/src/pages/AccountsPage.test.tsx`
   - Covers: AC7, AC8, AC9, AC10
   - Tests: `it('shows a loading placeholder until the first response')`, `it('AC7: shows the balances in USD')`, `it('AC8: shows a very large balance exactly')`, `it('AC9: shows that the accounts are being set up')`, `it('AC10: shows an error with Retry on a 5xx response')`, `it('AC10: shows an error with Retry on a network error')`, `it('AC10: Retry requests the summary again')`
