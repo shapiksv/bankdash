@@ -70,8 +70,8 @@ libs/               shared Java libraries
 services/           one Gradle project per microservice
   auth-service/     signup (emits auth.user-registered.v1), login, refresh, logout, /auth/me, password, two-factor, JWKS
   profile-service/  profile, preferences, avatar; creates profiles from auth.user-registered.v1
-  account-service/  accounts and cards (list, details, add, PIN, block → cards.status-changed.v1); opens CHECKING,
-                    SAVINGS and a first card from auth.user-registered.v1
+  account-service/  accounts and cards (balance summary, list, details, add, PIN, block → cards.status-changed.v1);
+                    opens CHECKING, SAVINGS and a first card from auth.user-registered.v1
   api-gateway/      Spring Cloud Gateway (WebMVC): /api/** routes, JWT validation, CORS
 apps/web/           React + TS + Vite frontend (api/, auth/, profile/, cards/, layout/, pages/, routes.tsx); TanStack Query;
                     Vite proxies /api to :8080

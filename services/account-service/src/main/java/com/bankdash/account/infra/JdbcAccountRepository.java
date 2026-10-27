@@ -6,6 +6,7 @@ import com.bankdash.account.domain.AccountType;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -35,6 +36,14 @@ class JdbcAccountRepository implements AccountRepository {
                 .params(userId, type.name())
                 .query(JdbcAccountRepository::map)
                 .optional();
+    }
+
+    @Override
+    public List<Account> findByUser(UUID userId) {
+        return jdbc.sql("SELECT * FROM account WHERE user_id = ?")
+                .param(userId)
+                .query(JdbcAccountRepository::map)
+                .list();
     }
 
     private static Account map(ResultSet rs, int row) throws SQLException {
