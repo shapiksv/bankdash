@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AccountSummary } from '../api/accounts'
 import { json, problem } from '../test/fetchMock'
 import { jane, renderWithAuth } from '../test/renderWithAuth'
@@ -91,5 +91,69 @@ describe('Accounts page', () => {
     expect(await within(card('My Balance')).findByText('$5.00')).toBeInTheDocument()
     expect(within(card('Total Saving')).getByText('$6.00')).toBeInTheDocument()
     expect(summaryCalls(api).length).toBeGreaterThan(before)
+  })
+})
+
+describe('Accounts page polling', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('AC12: polls every 2 seconds and stops once READY', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const answers = [pending, pending, ready('1250.50', '300.00')]
+    const { api } = renderAccounts(() => json(answers.shift() ?? ready('1250.50', '300.00')))
+
+    expect(await screen.findAllByText('Setting up your accounts…')).toHaveLength(2)
+    expect(summaryCalls(api)).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(summaryCalls(api)).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(600)
+    await vi.waitFor(() => expect(summaryCalls(api)).toHaveLength(2))
+    await vi.advanceTimersByTimeAsync(2000)
+
+    expect(await screen.findByText('$1,250.50')).toBeInTheDocument()
+    expect(screen.getByText('$300.00')).toBeInTheDocument()
+    expect(summaryCalls(api)).toHaveLength(3)
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(summaryCalls(api)).toHaveLength(3)
+  })
+
+  it('AC12: stops polling after 30 seconds and shows the error', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const { api } = renderAccounts(() => json(pending))
+    await screen.findAllByText('Setting up your accounts…')
+
+    await vi.advanceTimersByTimeAsync(29_000)
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(await within(card('My Balance')).findByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(within(card('Total Saving')).getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    expect(screen.queryByText('Setting up your accounts…')).not.toBeInTheDocument()
+
+    const calls = summaryCalls(api).length
+    expect(calls).toBeLessThanOrEqual(17)
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(summaryCalls(api)).toHaveLength(calls)
+  })
+
+  it('AC12: Retry after the timeout starts polling again', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    let answer: AccountSummary = pending
+    const { api } = renderAccounts(() => json(answer))
+    await vi.advanceTimersByTimeAsync(32_000)
+    await user.click(await within(card('My Balance')).findByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findAllByText('Setting up your accounts…')).toHaveLength(2)
+    const afterRetry = summaryCalls(api).length
+    answer = ready('7.00', '8.00')
+    await vi.advanceTimersByTimeAsync(2500)
+
+    expect(await screen.findByText('$7.00')).toBeInTheDocument()
+    expect(summaryCalls(api).length).toBeGreaterThan(afterRetry)
   })
 })

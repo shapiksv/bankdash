@@ -28,7 +28,7 @@ own. See [plan.md](plan.md) for the design (D1–D8) and [spec.md](spec.md) for 
   - Covers: AC7, AC8, AC9, AC10
   - Tests: `it('shows a loading placeholder until the first response')`, `it('AC7: shows the balances in USD')`, `it('AC8: shows a very large balance exactly')`, `it('AC9: shows that the accounts are being set up')`, `it('AC10: shows an error with Retry on a 5xx response')`, `it('AC10: shows an error with Retry on a network error')`, `it('AC10: Retry requests the summary again')`
 
-- [ ] **T6** — Poll every 2 seconds while pending, for at most 30 seconds
+- [x] **T6** — Poll every 2 seconds while pending, for at most 30 seconds
   - Files: `apps/web/src/accounts/queries.ts` (`refetchInterval`, `pendingSince`, timeout, `retry` resets it), `apps/web/src/pages/AccountsPage.test.tsx`
   - Covers: AC12, AC10 (the error state after the timeout)
   - Tests: `it('AC12: polls every 2 seconds and stops once READY')`, `it('AC12: stops polling after 30 seconds and shows the error')`, `it('AC12: Retry after the timeout starts polling again')`
