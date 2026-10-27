@@ -1,3 +1,4 @@
+import type { AccountSummary } from '../api/accounts'
 import type { CurrentUser } from '../api/auth'
 import type { Card } from '../api/cards'
 import type { Preferences, Profile } from '../api/profile'
@@ -41,3 +42,6 @@ export const janeCards: Card[] = [
   card('c2', '1234', 'savings', 'ACTIVE'),
   card('c3', '9012', 'checking', 'ACTIVE'),
 ]
+
+/** `GET /api/accounts/summary` of a user whose accounts are open and still empty. */
+export const janeSummary: AccountSummary = { status: 'READY', currency: 'USD', myBalance: '0.00', totalSaving: '0.00' }

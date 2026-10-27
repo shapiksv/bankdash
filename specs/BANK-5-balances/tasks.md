@@ -18,7 +18,7 @@ own. See [plan.md](plan.md) for the design (D1–D8) and [spec.md](spec.md) for 
   - Covers: AC1 (through the gateway), AC6
   - Tests: `GatewayIT.ac1_accountRequestsGoToAccountService`, `GatewayIT.ac6_accountsWithoutTokenIs401`, `GatewayIT.ac6_accountsWithInvalidTokenIs401`
 
-- [ ] **T4** — Add the web summary API and the USD string formatter
+- [x] **T4** — Add the web summary API and the USD string formatter
   - Files: `apps/web/src/api/accounts.ts`, `apps/web/src/accounts/money.ts`, `apps/web/src/accounts/money.test.ts`, `apps/web/src/test/users.ts` (`janeSummary`), `apps/web/src/test/renderWithAuth.tsx` (default `GET /api/accounts/summary`)
   - Covers: AC7, AC8 (formatting)
   - Tests: `it('AC7: formats 1250.50 as $1,250.50')`, `it('AC7: formats 300.00 and 0.00')`, `it('AC8: formats 12345678901234.89 exactly')`, `it('groups at every thousand')` (999.99, 1000.00), `it('rejects malformed amounts')`
