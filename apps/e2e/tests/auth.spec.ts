@@ -20,7 +20,7 @@ test('AUTH: signs up with the form, lands on the Dashboard and stays logged in a
 
 test('AUTH: logs in with the form', async ({ page, request }) => {
   // Signed up in a separate request context, so the page has no refresh cookie.
-  const user = await signUp(request)
+  const user = await signUp(request, { waitForAccounts: false })
   await page.goto('/login')
   await page.getByLabel('Email').fill(user.email)
   await page.getByLabel('Password').fill(user.password)
@@ -31,7 +31,7 @@ test('AUTH: logs in with the form', async ({ page, request }) => {
 })
 
 test('AUTH: rejects a wrong password', async ({ page, request }) => {
-  const user = await signUp(request)
+  const user = await signUp(request, { waitForAccounts: false })
   await page.goto('/login')
   await page.getByLabel('Email').fill(user.email)
   await page.getByLabel('Password').fill(`${user.password}-wrong`)

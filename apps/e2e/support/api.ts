@@ -26,23 +26,26 @@ export function newUserInput() {
 }
 
 /**
- * Signs up a unique user through the gateway and waits until account-service has opened their accounts and first
- * card (asynchronously, from auth.user-registered.v1). Called with `page.request`, the refresh cookie lands in
- * the page's context, so the next `page.goto` starts logged in, just like a reload after signup.
+ * Signs up a unique user through the gateway and, unless `waitForAccounts` is false, waits until account-service
+ * has opened their accounts and first card (asynchronously, from auth.user-registered.v1). Tests of auth alone
+ * skip that wait, so they neither wait for nor depend on account-service. Called with `page.request`, the refresh
+ * cookie lands in the page's context, so the next `page.goto` starts logged in, just like a reload after signup.
  */
-export async function signUp(request: APIRequestContext): Promise<User> {
+export async function signUp(request: APIRequestContext, { waitForAccounts = true } = {}): Promise<User> {
   const input = newUserInput()
   const signup = await request.post('/api/auth/signup', { data: input })
   expect(signup.status(), await signup.text()).toBe(201)
   const { accessToken } = (await signup.json()) as { accessToken: string }
   const api = new Api(request, accessToken)
   const { id } = await api.get<{ id: string }>('/api/auth/me')
-  await expect
-    .poll(async () => (await api.get<{ status: string }>('/api/accounts/summary')).status, {
-      message: 'accounts are opened after signup',
-      timeout: 20_000,
-    })
-    .toBe('READY')
+  if (waitForAccounts) {
+    await expect
+      .poll(async () => (await api.get<{ status: string }>('/api/accounts/summary')).status, {
+        message: 'accounts are opened after signup',
+        timeout: 20_000,
+      })
+      .toBe('READY')
+  }
   return { id, ...input, accessToken }
 }
 
