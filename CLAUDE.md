@@ -29,6 +29,16 @@ cd apps/web && npm install
 cd apps/web && npm run dev               # http://localhost:5173
 cd apps/web && npm test                  # Vitest, single run (npm run test:watch to watch)
 cd apps/web && npm run build && npm run lint
+
+# End-to-end UI tests (Playwright, Chromium; needs Docker, JDK 25 and apps/web's npm install)
+cd apps/e2e && npm install && npx playwright install chromium   # once
+cd apps/e2e && npm run e2e               # starts the e2e stack, runs all tests, stops what it started
+cd apps/e2e && npm run e2e -- --grep "BANK-5 "   # one ticket (any Playwright args after --)
+cd apps/e2e && npm run stack:up          # or keep the stack running while iterating...
+cd apps/e2e && npm test                  # ...run against it (add --ui, --headed, a file, -g)...
+cd apps/e2e && npm run stack:down        # ...and stop it
+cd apps/e2e && npm run report            # HTML report; traces and screenshots of failures are in test-results/
+cd apps/e2e && npm run typecheck && npm run lint
 ```
 
 ## Spec-Driven Development
@@ -41,7 +51,9 @@ Workflow (each skill is user-invoked and takes the spec folder, e.g. `/spec-revi
 2. **`/spec-review`**: read-only; reports ambiguities, contradictions, missing or untestable ACs and conflicts with the architecture as numbered questions. Answer them in the spec.
 3. **`/spec-plan`**: writes `plan.md` (design decisions with reasoning, files, endpoints, events, migrations) and `tasks.md` (small ordered tasks, each listing the ACs it covers), then stops until the plan is approved.
 4. **`/spec-implement`**: branch named after the folder, one small commit per task, test names reference AC ids (`ac3_rejectsForeignAccount`, `it('AC3: ...')`), then all checks and a smoke test through the gateway. If the spec is wrong or incomplete it stops and asks; the spec is updated first, never silently bypassed.
-5. **`/spec-verify`**: traceability table AC → test(s) → status → evidence, flags untested ACs, pushes and opens a draft PR with the table.
+5. **`/spec-verify`**: traceability table AC → test(s) → status → evidence (including e2e tests), flags untested ACs, pushes and opens a draft PR with the table.
+
+**`/ui-test <spec folder>`** (any time after implementation): finds the spec's UI ACs, writes the missing e2e tests in `apps/e2e`, runs them and reports AC → e2e test → result.
 
 ## Local infrastructure
 
@@ -54,6 +66,13 @@ Workflow (each skill is user-invoked and takes the spec folder, e.g. `/spec-revi
 - Kafka runs a single KRaft broker. **Auto topic creation is off**: every topic and its `.DLT` must be listed in `infra/kafka/topics.txt`. `create-topics.sh` creates them locally, and `libs/test-support` creates them in the test broker (also with auto-create off), so a missing entry fails the integration tests.
 - Postgres has one database and one user per service (`auth`, `profile`, `account`, `transaction`, `notification`). User = password = database name, and a service user can only connect to its own database. See `infra/postgres/init.sql`, which only runs when the volume is first created.
 - Ports: gateway 8080, auth 8081, profile 8082, account 8083, transaction 8084, notification 8085, web 5173, Kafka UI 8090.
+
+## End-to-end tests (`apps/e2e`)
+
+- **Own stack on dedicated ports**, dev port + 10000: Postgres 15432, Kafka 19092, gateway 18080, auth 18081, profile 18082, account 18083, web 15173 (`apps/e2e/support/env.ts`). Infra runs in the compose project `bankdash-e2e` (own containers and volumes, removed by `stack:down`), so a dev stack keeps running untouched. `scripts/stack.ts` records what it started in `.stack/state.json` and stops only that; if a port is taken by anything else it aborts instead. Logs: `apps/e2e/.stack/logs/`.
+- **Test names** start with the ticket and AC ids: `test('BANK-5 AC9: ...')`, several ACs as `BANK-5 AC9 AC11: ...`; tests from before spec-driven development use `AUTH: ...`. `/spec-verify` and `/ui-test` find tests by these names.
+- **No shared state:** every test signs up its own user (the `user` fixture of `support/fixtures.ts` signs up through `page.request`, so the page starts logged in). Set up state through the real API where one exists (`Api`, e.g. cards); data without an API yet (balances, a missing account) is written to the service's e2e database from `support/db.ts`. **Never add test-only endpoints to production code.**
+- Only assert through the UI what the AC says the UI does. `page.route` is for fault injection only (5xx, network errors). Time-based behaviour (polling, timeouts) uses `page.clock`: it keeps running in real time after `install()`, so wait only briefly after a `fastForward` (see `bank-5-balances.spec.ts`).
 
 ## Repository structure
 
@@ -74,7 +93,8 @@ services/           one Gradle project per microservice
                     opens CHECKING, SAVINGS and a first card from auth.user-registered.v1
   api-gateway/      Spring Cloud Gateway (WebMVC): /api/** routes, JWT validation, CORS
 apps/web/           React + TS + Vite frontend (api/, auth/, profile/, cards/, layout/, pages/, routes.tsx); TanStack Query;
-                    Vite proxies /api to :8080
+                    Vite proxies /api to :8080 (BANKDASH_API_URL overrides it)
+apps/e2e/           Playwright e2e tests: tests/ (one spec file per ticket), support/ (fixtures, api, db, env), scripts/stack.ts
 infra/              postgres/init.sql; kafka/topics.txt + create-topics.sh
 specs/              one folder per ticket (spec.md, plan.md, tasks.md); _template/spec.md
 docs/               ui-analysis.md, architecture.md, adr/ (0001: JWT and refresh tokens)
@@ -86,7 +106,7 @@ Any folder under `libs/` or `services/` with a `build.gradle.kts` is included au
 ## Conventions
 
 - **English only** in code, comments, docs and commit messages.
-- **Every change ships with tests.** `./gradlew test` (and `npm test` for web changes) must pass before committing.
+- **Every change ships with tests.** `./gradlew test` (and `npm test` for web changes) must pass before committing; changes to `apps/web` must also pass `cd apps/e2e && npm run e2e`.
 - **Flyway for every schema change**, in `src/main/resources/db/migration`. Never edit an applied migration; add a new one.
 - **Errors are `ProblemDetail`** (RFC 9457), including 401s from Spring Security.
 - **Auth:** the browser holds the access token in memory only; the refresh token is the httpOnly `bd_refresh` cookie. Services validate JWTs against auth-service's JWKS (`iss=bankdash-auth`, `aud=bankdash-api`, user id = `sub`). CORS is configured only in the gateway. Details: `docs/adr/0001-jwt-and-refresh-tokens.md`.
