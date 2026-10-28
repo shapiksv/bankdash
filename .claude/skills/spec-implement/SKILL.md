@@ -47,11 +47,12 @@ Show the real output of each; never claim a result you did not see.
 
 1. `./gradlew build` (compiles and runs all tests).
 2. If `apps/web` changed: `cd apps/web && npm test && npm run build && npm run lint`.
+3. If `apps/web` changed (`git diff --quiet main...HEAD -- apps/web` exits non-zero): the **whole** e2e suite, `cd apps/e2e && npm run e2e`, so a change to one page cannot silently break another ticket's UI. It starts its own stack on the e2e ports and stops only what it started (`CLAUDE.md`, End-to-end tests); if it aborts because a port is taken, report the process it names and ask, never stop it. Save the output to `$ARGUMENTS/e2e-test.log` (git-ignored). A failing e2e test of an earlier ticket is a regression: fix it like any other check. If it fails because this spec deliberately changes that behaviour, stop and ask; never edit or delete another ticket's e2e test without that decision. Failure traces and screenshots are in `apps/e2e/test-results/`.
 
 ## 5. Smoke test through the gateway
 
 - `docker compose up -d --wait` and `./infra/kafka/create-topics.sh`.
-- Before starting anything, check the ports (`lsof -iTCP:<port> -sTCP:LISTEN`). **Never stop processes you did not start**; if a port is taken, run the stack on alternate ports (e.g. `--args='--server.port=18080 ...'`) and say so.
+- Before starting anything, check the ports (`lsof -iTCP:<port> -sTCP:LISTEN`). **Never stop processes you did not start**; if a port is taken, run the stack on alternate ports (e.g. `--args='--server.port=28080 ...'`; 18080–18083 and 15173 belong to the e2e stack) and say so.
 - Start auth-service, the gateway and every service the ticket touches with `./gradlew :services:<svc>:bootRun` in the background; wait until each `/actuator/health` is `UP`.
 - Run the flow from plan.md with `curl` **through the gateway**: sign up, log in, then exercise the ticket's endpoints, covering the happy path and the main error cases of the ACs. Verify asynchronous effects through API state, retrying briefly where eventually consistent.
 - Print every request and its response (status and body), noting which AC each demonstrates. Save the output to `$ARGUMENTS/smoke-test.log` (git-ignored; `/spec-verify` uses it as evidence).
@@ -61,4 +62,4 @@ If anything fails, fix it in a new commit, re-run the affected checks, and recor
 
 ## 6. Finish
 
-Do not push or open a PR — that is `/spec-verify`. Report: commits made, check results, smoke-test summary, and every spec/plan/tasks change with its reason. Suggest `/spec-verify $ARGUMENTS`.
+Do not push or open a PR — that is `/spec-verify`. Report: commits made, check results (including the e2e suite, if it ran), smoke-test summary, and every spec/plan/tasks change with its reason. If the spec has UI ACs without an e2e test named `<TICKET> AC<n>: ...` in `apps/e2e/tests`, list them and suggest `/ui-test $ARGUMENTS`. Suggest `/spec-verify $ARGUMENTS`.
