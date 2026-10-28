@@ -26,3 +26,10 @@ tasks.named<BootRun>("bootRun") {
     systemProperty("spring.profiles.default", "dev")
     systemProperty("user.timezone", "UTC")
 }
+
+// The toolchain's java executable, for scripts that run the boot jar themselves (apps/e2e/scripts/stack.ts).
+val javaLauncher = javaToolchains.launcherFor(java.toolchain)
+tasks.register("printJavaLauncher") {
+    val executable = javaLauncher.map { it.executablePath.asFile.absolutePath }
+    doLast { println(executable.get()) }
+}

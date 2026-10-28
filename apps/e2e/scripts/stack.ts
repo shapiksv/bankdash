@@ -1,6 +1,7 @@
 /**
  * Starts and stops the e2e stack: Postgres and Kafka in their own compose project, auth, profile and account
- * services and the gateway via bootRun, and the Vite dev server, all on the ports of support/env.ts.
+ * services and the gateway from their boot jars (built once, run with `java -jar`, so each JVM is a direct child
+ * in its own process group), and the Vite dev server, all on the ports of support/env.ts.
  *
  *   node scripts/stack.ts up     start what is not running yet and wait until everything is healthy
  *   node scripts/stack.ts down   stop what `up` started
@@ -35,8 +36,6 @@ interface Started extends Proc {
   name: string
   port: number
   healthUrl: string
-  /** bootRun's application JVM, a child of the Gradle daemon rather than of the process we spawned. */
-  app?: Proc
 }
 
 interface State {
@@ -106,17 +105,20 @@ export async function up(): Promise<void> {
     execFileSync(join(ROOT, 'infra/kafka/create-topics.sh'), { env: composeEnv, stdio: ['ignore', 'ignore', 'inherit'] })
 
     if (!existsSync(join(WEB_DIR, 'node_modules'))) throw new Error('Run `npm install` in apps/web first.')
-    log('Compiling the services…')
-    execFileSync(join(ROOT, 'gradlew'), ['-q', ...SERVICES.map((s) => `:services:${s.name}:classes`)], {
-      cwd: ROOT,
-      stdio: 'inherit',
-    })
+    log('Building the services…')
+    const java = buildServices()
 
     for (const service of SERVICES) {
-      const gradleArgs = [`:services:${service.name}:bootRun`, `--args=--server.port=${service.port} ${service.args.join(' ')}`]
-      state.processes.push(
-        start(service.name, service.port, `http://localhost:${service.port}/actuator/health`, join(ROOT, 'gradlew'), gradleArgs, ROOT),
-      )
+      // The JVM settings of bootRun (build-logic/bankdash.spring-service): the dev profile by default, and UTC.
+      const javaArgs = [
+        '-Dspring.profiles.default=dev',
+        '-Duser.timezone=UTC',
+        '-jar',
+        join(ROOT, `services/${service.name}/build/libs/${service.name}.jar`),
+        `--server.port=${service.port}`,
+        ...service.args,
+      ]
+      state.processes.push(start(service.name, service.port, `http://localhost:${service.port}/actuator/health`, java, javaArgs, ROOT))
       writeState(state)
     }
     state.processes.push(
@@ -128,12 +130,6 @@ export async function up(): Promise<void> {
 
     log('Waiting for every service to be healthy…')
     await Promise.all(state.processes.map((p) => waitHealthy(p)))
-    for (const p of state.processes) {
-      const [appPid] = listeners(p.port)
-      // The listener is ours: the port was free before we started the service.
-      if (appPid !== undefined && appPid !== p.pid) p.app = { pid: appPid, started: startTime(appPid)! }
-    }
-    writeState(state)
     log(`The e2e stack is up: ${WEB_URL} (logs in ${LOG_DIR})`)
   } catch (error) {
     log('Starting the e2e stack failed; stopping what was started.')
@@ -152,8 +148,7 @@ export async function down(): Promise<void> {
     return
   }
   for (const p of [...state.processes].reverse()) {
-    if (p.app && isOurs(p.app)) await stop(p.app.pid, false)
-    if (isOurs(p)) await stop(p.pid, true)
+    if (isOurs(p)) await stop(p.pid)
   }
   if (state.compose) {
     log('Removing the e2e Postgres and Kafka containers and volumes…')
@@ -179,7 +174,7 @@ function start(
   env: Record<string, string> = {},
 ): Started {
   const out = openSync(join(LOG_DIR, `${name}.log`), 'w')
-  // Its own process group, so `down` can signal the launcher and everything it forked (npm → vite).
+  // Its own process group, so `down` can signal it and everything it forked (npm → vite).
   const child = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', out, out] })
   child.unref()
   if (child.pid === undefined) throw new Error(`Could not start ${name}`)
@@ -187,18 +182,35 @@ function start(
   return { name, port, healthUrl, pid: child.pid, started: startTime(child.pid) ?? '' }
 }
 
-async function stop(pid: number, group: boolean): Promise<void> {
+/** Stops the process group of a process started by {@link start}. */
+async function stop(pid: number): Promise<void> {
   const signal = (sig: NodeJS.Signals) => {
     try {
-      process.kill(group ? -pid : pid, sig)
+      process.kill(-pid, sig)
     } catch {
       // Already gone.
     }
   }
-  signal(group ? 'SIGINT' : 'SIGTERM')
+  signal('SIGINT')
   const deadline = Date.now() + STOP_TIMEOUT_MS
   while (alive(pid) && Date.now() < deadline) await sleep(250)
   if (alive(pid)) signal('SIGKILL')
+}
+
+/**
+ * Builds every service's boot jar in one Gradle run and returns the toolchain's java executable, the JDK that
+ * bootRun would use.
+ */
+function buildServices(): string {
+  const tasks = [...SERVICES.map((s) => `:services:${s.name}:bootJar`), `:services:${SERVICES[0]!.name}:printJavaLauncher`]
+  const output = execFileSync(join(ROOT, 'gradlew'), ['-q', ...tasks], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+  })
+  const java = output.trim().split('\n').at(-1) ?? ''
+  if (!existsSync(java)) throw new Error(`Gradle did not report the toolchain's java executable:\n${output}`)
+  return java
 }
 
 async function waitHealthy(p: Started): Promise<void> {
