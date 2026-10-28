@@ -4,14 +4,19 @@
  */
 import { spawn } from 'node:child_process'
 import { resolve } from 'node:path'
-import { down, isRunning, up } from './stack.ts'
+import { abortOnSignals, down, isRunning, signalExitCode, up } from './stack.ts'
 
+const abort = abortOnSignals()
 const wasRunning = await isRunning()
+let started = false
 let code = 1
 try {
-  if (!wasRunning) await up()
+  if (!wasRunning) {
+    // On failure or a signal, up() has already stopped what it started.
+    await up(abort)
+    started = true
+  }
   // Ctrl+C reaches Playwright too (same process group); wait for it to finish, then clean up.
-  process.on('SIGINT', () => {})
   code = await new Promise<number>((done) => {
     const child = spawn('npx', ['playwright', 'test', ...process.argv.slice(2)], {
       cwd: resolve(import.meta.dirname, '..'),
@@ -20,8 +25,8 @@ try {
     child.on('exit', (exitCode) => done(exitCode ?? 1))
   })
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error)
+  if (!abort.aborted) console.error(error instanceof Error ? error.message : error)
 } finally {
-  if (!wasRunning) await down()
+  if (started) await down()
 }
-process.exit(code)
+process.exit(signalExitCode(abort) ?? code)

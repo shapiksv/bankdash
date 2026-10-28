@@ -13,6 +13,7 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { setImmediate, setTimeout } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { COMPOSE_PROJECT, PORTS, WEB_URL } from '../support/env.ts'
 
@@ -25,6 +26,10 @@ const STATE_FILE = join(STACK_DIR, 'state.json')
 
 const HEALTH_TIMEOUT_MS = 180_000
 const STOP_TIMEOUT_MS = 20_000
+
+/** The signals that end a run (Ctrl+C, a closed terminal, a cancelled CI job), with exit code 128 + number. */
+const STOP_SIGNALS = { SIGINT: 130, SIGHUP: 129, SIGTERM: 143 } as const
+export type StopSignal = keyof typeof STOP_SIGNALS
 
 /** A process this script started, identified by PID and start time. */
 interface Proc {
@@ -71,7 +76,11 @@ const SERVICES = [
   },
 ]
 
-export async function up(): Promise<void> {
+/**
+ * `abort` (see {@link abortOnSignals}) interrupts the start: `up` then stops what it started, once, and rejects
+ * with the abort reason.
+ */
+export async function up(abort?: AbortSignal): Promise<void> {
   mkdirSync(LOG_DIR, { recursive: true })
   const previous = readState()
   if (previous) {
@@ -91,22 +100,27 @@ export async function up(): Promise<void> {
   }
 
   const state: State = { compose: false, processes: [] }
-  const stopOnSignal = () => void down().finally(() => process.exit(130))
-  process.once('SIGINT', stopOnSignal)
-  process.once('SIGTERM', stopOnSignal)
+  // The steps below block the event loop, so a signal is only seen at the next checkpoint.
+  const checkpoint = async () => {
+    await setImmediate()
+    abort?.throwIfAborted()
+  }
   try {
     if (!composeRunning) {
       state.compose = true
       writeState(state)
       log('Starting Postgres and Kafka…')
       compose(['up', '-d', '--wait', 'postgres', 'kafka'], 'inherit')
+      await checkpoint()
     }
     log('Creating Kafka topics…')
     execFileSync(join(ROOT, 'infra/kafka/create-topics.sh'), { env: composeEnv, stdio: ['ignore', 'ignore', 'inherit'] })
+    await checkpoint()
 
     if (!existsSync(join(WEB_DIR, 'node_modules'))) throw new Error('Run `npm install` in apps/web first.')
     log('Building the services…')
     const java = buildServices()
+    await checkpoint()
 
     for (const service of SERVICES) {
       // The JVM settings of bootRun (build-logic/bankdash.spring-service): the dev profile by default, and UTC.
@@ -129,15 +143,18 @@ export async function up(): Promise<void> {
     writeState(state)
 
     log('Waiting for every service to be healthy…')
-    await Promise.all(state.processes.map((p) => waitHealthy(p)))
+    await Promise.all(state.processes.map((p) => waitHealthy(p, abort)))
     log(`The e2e stack is up: ${WEB_URL} (logs in ${LOG_DIR})`)
   } catch (error) {
-    log('Starting the e2e stack failed; stopping what was started.')
+    // A Ctrl+C also reaches a blocking child (Gradle, compose), which then fails first: let the signal arrive.
+    await setImmediate()
+    if (abort?.aborted) {
+      log(`Interrupted (${String(abort.reason)}); stopping what was started.`)
+    } else {
+      log('Starting the e2e stack failed; stopping what was started.')
+    }
     await down()
-    throw error
-  } finally {
-    process.off('SIGINT', stopOnSignal)
-    process.off('SIGTERM', stopOnSignal)
+    throw abort?.aborted ? abort.reason : error
   }
 }
 
@@ -213,12 +230,13 @@ function buildServices(): string {
   return java
 }
 
-async function waitHealthy(p: Started): Promise<void> {
+async function waitHealthy(p: Started, abort?: AbortSignal): Promise<void> {
   const deadline = Date.now() + HEALTH_TIMEOUT_MS
   while (Date.now() < deadline) {
+    abort?.throwIfAborted()
     if (await healthy(p.healthUrl)) return
     if (!alive(p.pid)) throw new Error(`${p.name} exited during startup, see ${join(LOG_DIR, `${p.name}.log`)}`)
-    await sleep(1000)
+    await setTimeout(1000, undefined, { signal: abort }).catch(() => {})
   }
   throw new Error(`${p.name} was not healthy after ${HEALTH_TIMEOUT_MS / 1000} s, see ${join(LOG_DIR, `${p.name}.log`)}`)
 }
@@ -292,7 +310,27 @@ function writeState(state: State): void {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return setTimeout(ms)
+}
+
+/**
+ * Turns the signals that end a run into an abort instead of Node's immediate exit, so the work in progress stops
+ * and the caller's cleanup runs exactly once. `onSignal` is called for every such signal.
+ */
+export function abortOnSignals(onSignal?: (signal: StopSignal) => void): AbortSignal {
+  const controller = new AbortController()
+  for (const signal of Object.keys(STOP_SIGNALS) as StopSignal[]) {
+    process.on(signal, () => {
+      controller.abort(signal)
+      onSignal?.(signal)
+    })
+  }
+  return controller.signal
+}
+
+/** The conventional exit code (128 + signal number) if a signal from {@link abortOnSignals} ended the run. */
+export function signalExitCode(abort: AbortSignal): number | undefined {
+  return abort.aborted ? STOP_SIGNALS[abort.reason as StopSignal] : undefined
 }
 
 function log(message: string): void {
@@ -301,13 +339,17 @@ function log(message: string): void {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const action = process.argv[2]
-  const actions: Record<string, () => Promise<void>> = { up, down }
+  const actions: Record<string, (abort: AbortSignal) => Promise<void>> = { up, down }
   if (!actions[action ?? '']) {
     console.error('Usage: node scripts/stack.ts up|down')
     process.exit(2)
   }
-  actions[action!]!().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error)
-    process.exit(1)
-  })
+  const abort = abortOnSignals()
+  actions[action!]!(abort).then(
+    () => process.exit(signalExitCode(abort) ?? 0),
+    (error: unknown) => {
+      if (!abort.aborted) console.error(error instanceof Error ? error.message : error)
+      process.exit(signalExitCode(abort) ?? 1)
+    },
+  )
 }
