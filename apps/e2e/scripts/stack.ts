@@ -47,7 +47,7 @@ interface Started extends Proc {
 }
 
 interface State {
-  /** True only if `up` created the compose project; a project that was already running is left alone. */
+  /** True once `up` has started the compose project (or taken over a leftover one): `down` then removes it. */
   compose: boolean
   processes: Started[]
 }
@@ -95,27 +95,29 @@ export async function up(abort?: AbortSignal): Promise<void> {
     await down()
   }
 
-  const composeRunning = compose(['ps', '-q']).trim() !== ''
-  const ports = [...SERVICES.map((s) => s.port), PORTS.web, ...(composeRunning ? [] : [PORTS.postgres, PORTS.kafka])]
+  // The compose project belongs to the e2e stack alone: one left over by an earlier run whose state is gone is
+  // completed and then removed by `down` like a new one. Its running containers hold their own ports.
+  const runningInfra = compose(['ps', '--status', 'running', '--services']).split('\n').filter(Boolean)
+  const infraPorts = (['postgres', 'kafka'] as const).filter((s) => !runningInfra.includes(s)).map((s) => PORTS[s])
+  const ports = [...SERVICES.map((s) => s.port), PORTS.web, ...infraPorts]
   const taken = ports.flatMap((port) => listeners(port).map((pid) => `  port ${port}: PID ${pid} ${command(pid)}`))
   if (taken.length > 0) {
     throw new Error(`Ports of the e2e stack are in use by processes this script did not start:\n${taken.join('\n')}`)
   }
 
-  const state: State = { compose: false, processes: [] }
+  const state: State = { compose: true, processes: [] }
   // The steps below block the event loop, so a signal is only seen at the next checkpoint.
   const checkpoint = async () => {
     await setImmediate()
     abort?.throwIfAborted()
   }
   try {
-    if (!composeRunning) {
-      state.compose = true
-      writeState(state)
-      log('Starting Postgres and Kafka…')
-      compose(['up', '-d', '--wait', 'postgres', 'kafka'], 'inherit')
-      await checkpoint()
-    }
+    writeState(state)
+    if (runningInfra.length > 0) log(`Reusing the running containers of an earlier e2e stack: ${runningInfra.join(', ')}.`)
+    log('Starting Postgres and Kafka…')
+    // Starts only what is not running yet.
+    compose(['up', '-d', '--wait', 'postgres', 'kafka'], 'inherit')
+    await checkpoint()
     log('Creating Kafka topics…')
     execFileSync(join(ROOT, 'infra/kafka/create-topics.sh'), { env: composeEnv, stdio: ['ignore', 'ignore', 'inherit'] })
     await checkpoint()
@@ -164,7 +166,12 @@ export async function up(abort?: AbortSignal): Promise<void> {
 export async function down(): Promise<void> {
   const state = readState()
   if (!state) {
-    log('Nothing to stop: no e2e stack was started by this script.')
+    if (compose(['ps', '--all', '--quiet']).trim() === '') {
+      log('Nothing to stop: no e2e stack was started by this script.')
+    } else {
+      log('Removing the containers and volumes left over by an earlier e2e stack…')
+      compose(['down', '-v'], 'inherit')
+    }
     return
   }
   for (const p of [...state.processes].reverse()) {
