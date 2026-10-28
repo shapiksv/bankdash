@@ -9,9 +9,11 @@
  * Everything `up` starts is recorded in .stack/state.json (PID plus start time, so a reused PID is never
  * mistaken for ours), and `down` stops only that. A port held by anything else aborts `up`: processes this
  * script did not start are never stopped. Logs go to .stack/logs/.
+ *
+ * One run at a time: `up`, `down` and all of `npm run e2e` hold .stack/lock (see {@link withStackLock}).
  */
 import { execFileSync, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { setImmediate, setTimeout } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
@@ -23,6 +25,7 @@ const WEB_DIR = join(ROOT, 'apps/web')
 const STACK_DIR = join(E2E_DIR, '.stack')
 const LOG_DIR = join(STACK_DIR, 'logs')
 const STATE_FILE = join(STACK_DIR, 'state.json')
+const LOCK_FILE = join(STACK_DIR, 'lock')
 
 const HEALTH_TIMEOUT_MS = 180_000
 const STOP_TIMEOUT_MS = 20_000
@@ -173,6 +176,53 @@ export async function down(): Promise<void> {
   }
   rmSync(STATE_FILE, { force: true })
   log('The e2e stack is stopped.')
+}
+
+/**
+ * Runs `fn` while holding .stack/lock, so two runs never start or stop the stack at the same time, and no run
+ * stops it under another run's tests. Fails at once if a live run holds the lock; the lock of a run that is gone
+ * is taken over.
+ */
+export async function withStackLock<T>(fn: () => Promise<T>): Promise<T> {
+  mkdirSync(STACK_DIR, { recursive: true })
+  const me: Proc = { pid: process.pid, started: startTime(process.pid) ?? '' }
+  while (!tryCreate(LOCK_FILE, JSON.stringify(me))) {
+    const holder = readLock()
+    if (holder === 'unreadable' || (holder !== undefined && isOurs(holder))) {
+      const who = holder === 'unreadable' ? 'just started' : `PID ${holder.pid}: ${command(holder.pid)}`
+      throw new Error(`Another e2e run is using the stack (${who}). Wait until it has finished.`)
+    }
+    if (holder) log(`Taking over the lock of an e2e run that is gone (PID ${holder.pid}).`)
+    rmSync(LOCK_FILE, { force: true })
+  }
+  try {
+    return await fn()
+  } finally {
+    const holder = readLock()
+    if (holder !== 'unreadable' && holder?.pid === me.pid) rmSync(LOCK_FILE, { force: true })
+  }
+}
+
+/** True if this call created `file`; false if it exists. */
+function tryCreate(file: string, content: string): boolean {
+  try {
+    writeFileSync(file, content, { flag: 'wx' })
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false
+    throw error
+  }
+}
+
+/** The lock's holder; "unreadable" while it is being written (or if a run died right then: see below). */
+function readLock(): Proc | 'unreadable' | undefined {
+  try {
+    return JSON.parse(readFileSync(LOCK_FILE, 'utf8')) as Proc
+  } catch {
+    if (!existsSync(LOCK_FILE)) return undefined
+    // Written by a run that died between creating and writing it, if it is older than a few seconds.
+    return Date.now() - statSync(LOCK_FILE).mtimeMs < 5000 ? 'unreadable' : undefined
+  }
 }
 
 /** True if a stack started by this script is running and healthy. */
@@ -345,7 +395,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     process.exit(2)
   }
   const abort = abortOnSignals()
-  actions[action!]!(abort).then(
+  withStackLock(() => actions[action!]!(abort)).then(
     () => process.exit(signalExitCode(abort) ?? 0),
     (error: unknown) => {
       if (!abort.aborted) console.error(error instanceof Error ? error.message : error)

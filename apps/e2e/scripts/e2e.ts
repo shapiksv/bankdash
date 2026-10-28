@@ -1,10 +1,11 @@
 /**
  * `npm run e2e [-- <playwright args>]`: starts the e2e stack unless it is already running, runs Playwright, and
- * stops the stack again only if this run started it. Exits with Playwright's exit code.
+ * stops the stack again only if this run started it. Exits with Playwright's exit code. Holds the stack's lock
+ * throughout, so no other run starts or stops the stack meanwhile.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { resolve } from 'node:path'
-import { abortOnSignals, down, isRunning, signalExitCode, up } from './stack.ts'
+import { abortOnSignals, down, isRunning, signalExitCode, up, withStackLock } from './stack.ts'
 
 let playwright: ChildProcess | undefined
 // Ctrl+C, a closed terminal or a cancelled CI job: Playwright gets a Ctrl+C (a second one makes it stop without
@@ -17,28 +18,35 @@ const abort = abortOnSignals(() => {
     // Already gone.
   }
 })
-const wasRunning = await isRunning()
-let started = false
+
 let code = 1
 try {
-  if (!wasRunning) {
-    // On failure or a signal, up() has already stopped what it started.
-    await up(abort)
-    started = true
-  }
-  abort.throwIfAborted()
-  code = await new Promise<number>((done) => {
-    // Its own process group, so a terminal's Ctrl+C reaches it only once, through the handler above.
-    playwright = spawn('npx', ['playwright', 'test', ...process.argv.slice(2)], {
-      cwd: resolve(import.meta.dirname, '..'),
-      detached: true,
-      stdio: 'inherit',
-    })
-    playwright.on('exit', (exitCode) => done(exitCode ?? 1))
-  })
+  code = await withStackLock(run)
 } catch (error) {
   if (!abort.aborted) console.error(error instanceof Error ? error.message : error)
-} finally {
-  if (started) await down()
 }
 process.exit(signalExitCode(abort) ?? code)
+
+async function run(): Promise<number> {
+  const wasRunning = await isRunning()
+  let started = false
+  try {
+    if (!wasRunning) {
+      // On failure or a signal, up() has already stopped what it started.
+      await up(abort)
+      started = true
+    }
+    abort.throwIfAborted()
+    return await new Promise<number>((done) => {
+      // Its own process group, so a terminal's Ctrl+C reaches it only once, through the handler above.
+      playwright = spawn('npx', ['playwright', 'test', ...process.argv.slice(2)], {
+        cwd: resolve(import.meta.dirname, '..'),
+        detached: true,
+        stdio: 'inherit',
+      })
+      playwright.on('exit', (exitCode) => done(exitCode ?? 1))
+    })
+  } finally {
+    if (started) await down()
+  }
+}
