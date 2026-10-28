@@ -8,7 +8,10 @@ const SUMMARY = '**/api/accounts/summary'
 const PENDING_TEXT = 'Setting up your accounts…'
 const ERROR_TEXT = 'Your balance could not be loaded.'
 
-function kpi(page: Page, label: 'My Balance' | 'Total Saving') {
+/** The two balance cards; AC9–AC12 expect the same state on both. */
+const KPIS = ['My Balance', 'Total Saving'] as const
+
+function kpi(page: Page, label: (typeof KPIS)[number]) {
   return page.getByRole('region', { name: label })
 }
 
@@ -46,7 +49,7 @@ test('BANK-5 AC8: a very large balance is shown exactly', async ({ page, user })
 test('BANK-5 AC9 AC11: with only the CHECKING account both cards show the pending state', async ({ page, user }) => {
   await removeSavings(user.id)
   await page.goto('/accounts')
-  for (const label of ['My Balance', 'Total Saving'] as const) {
+  for (const label of KPIS) {
     await expect(kpi(page, label)).toContainText(PENDING_TEXT)
     await expect(kpi(page, label)).not.toContainText(ERROR_TEXT)
   }
@@ -70,7 +73,7 @@ for (const [failure, fail] of FAILURES) {
     // Fault injection only: the summary itself comes from the real backend once the route is removed.
     await page.route(SUMMARY, fail)
     await page.goto('/accounts')
-    for (const label of ['My Balance', 'Total Saving'] as const) {
+    for (const label of KPIS) {
       await expect(kpi(page, label)).toContainText(ERROR_TEXT)
       await expect(kpi(page, label).getByRole('button', { name: 'Retry' })).toBeVisible()
     }
@@ -166,7 +169,7 @@ test('BANK-5 AC12: stops polling after 30 s of PENDING and shows the error state
   await pollAfter(page, () => page.clock.runFor(1))
   expect(requests(), 'a poll at 30 s').toBe(3)
   await whilePaused(page, async () => {
-    for (const label of ['My Balance', 'Total Saving'] as const) {
+    for (const label of KPIS) {
       await expect(kpi(page, label), 'the error state at 30 s').toContainText(ERROR_TEXT, NOW)
       await expect(kpi(page, label).getByRole('button', { name: 'Retry' })).toBeVisible(NOW)
     }
