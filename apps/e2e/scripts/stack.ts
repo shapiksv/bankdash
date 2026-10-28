@@ -1,0 +1,301 @@
+/**
+ * Starts and stops the e2e stack: Postgres and Kafka in their own compose project, auth, profile and account
+ * services and the gateway via bootRun, and the Vite dev server, all on the ports of support/env.ts.
+ *
+ *   node scripts/stack.ts up     start what is not running yet and wait until everything is healthy
+ *   node scripts/stack.ts down   stop what `up` started
+ *
+ * Everything `up` starts is recorded in .stack/state.json (PID plus start time, so a reused PID is never
+ * mistaken for ours), and `down` stops only that. A port held by anything else aborts `up`: processes this
+ * script did not start are never stopped. Logs go to .stack/logs/.
+ */
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { COMPOSE_PROJECT, PORTS, WEB_URL } from '../support/env.ts'
+
+const E2E_DIR = resolve(import.meta.dirname, '..')
+const ROOT = resolve(E2E_DIR, '../..')
+const WEB_DIR = join(ROOT, 'apps/web')
+const STACK_DIR = join(E2E_DIR, '.stack')
+const LOG_DIR = join(STACK_DIR, 'logs')
+const STATE_FILE = join(STACK_DIR, 'state.json')
+
+const HEALTH_TIMEOUT_MS = 180_000
+const STOP_TIMEOUT_MS = 20_000
+
+/** A process this script started, identified by PID and start time. */
+interface Proc {
+  pid: number
+  started: string
+}
+
+interface Started extends Proc {
+  name: string
+  port: number
+  healthUrl: string
+  /** bootRun's application JVM, a child of the Gradle daemon rather than of the process we spawned. */
+  app?: Proc
+}
+
+interface State {
+  /** True only if `up` created the compose project; a project that was already running is left alone. */
+  compose: boolean
+  processes: Started[]
+}
+
+const composeEnv = {
+  ...process.env,
+  COMPOSE_PROJECT_NAME: COMPOSE_PROJECT,
+  POSTGRES_PORT: String(PORTS.postgres),
+  KAFKA_EXTERNAL_PORT: String(PORTS.kafka),
+}
+
+const db = (name: string) => `--spring.datasource.url=jdbc:postgresql://localhost:${PORTS.postgres}/${name}`
+const kafka = `--spring.kafka.bootstrap-servers=localhost:${PORTS.kafka}`
+const authUrl = `--bankdash.services.auth=http://localhost:${PORTS.auth}`
+
+const SERVICES = [
+  { name: 'auth-service', port: PORTS.auth, args: [db('auth'), kafka] },
+  { name: 'profile-service', port: PORTS.profile, args: [db('profile'), kafka, authUrl] },
+  { name: 'account-service', port: PORTS.account, args: [db('account'), kafka, authUrl] },
+  {
+    name: 'api-gateway',
+    port: PORTS.gateway,
+    args: [
+      authUrl,
+      `--bankdash.services.profile=http://localhost:${PORTS.profile}`,
+      `--bankdash.services.account=http://localhost:${PORTS.account}`,
+      `--bankdash.cors.allowed-origins=${WEB_URL}`,
+    ],
+  },
+]
+
+export async function up(): Promise<void> {
+  mkdirSync(LOG_DIR, { recursive: true })
+  const previous = readState()
+  if (previous) {
+    if (await isHealthy(previous)) {
+      log('The e2e stack is already running.')
+      return
+    }
+    log('Stopping the rest of an earlier e2e stack that is no longer healthy.')
+    await down()
+  }
+
+  const composeRunning = compose(['ps', '-q']).trim() !== ''
+  const ports = [...SERVICES.map((s) => s.port), PORTS.web, ...(composeRunning ? [] : [PORTS.postgres, PORTS.kafka])]
+  const taken = ports.flatMap((port) => listeners(port).map((pid) => `  port ${port}: PID ${pid} ${command(pid)}`))
+  if (taken.length > 0) {
+    throw new Error(`Ports of the e2e stack are in use by processes this script did not start:\n${taken.join('\n')}`)
+  }
+
+  const state: State = { compose: false, processes: [] }
+  const stopOnSignal = () => void down().finally(() => process.exit(130))
+  process.once('SIGINT', stopOnSignal)
+  process.once('SIGTERM', stopOnSignal)
+  try {
+    if (!composeRunning) {
+      state.compose = true
+      writeState(state)
+      log('Starting Postgres and Kafka…')
+      compose(['up', '-d', '--wait', 'postgres', 'kafka'], 'inherit')
+    }
+    log('Creating Kafka topics…')
+    execFileSync(join(ROOT, 'infra/kafka/create-topics.sh'), { env: composeEnv, stdio: ['ignore', 'ignore', 'inherit'] })
+
+    if (!existsSync(join(WEB_DIR, 'node_modules'))) throw new Error('Run `npm install` in apps/web first.')
+    log('Compiling the services…')
+    execFileSync(join(ROOT, 'gradlew'), ['-q', ...SERVICES.map((s) => `:services:${s.name}:classes`)], {
+      cwd: ROOT,
+      stdio: 'inherit',
+    })
+
+    for (const service of SERVICES) {
+      const gradleArgs = [`:services:${service.name}:bootRun`, `--args=--server.port=${service.port} ${service.args.join(' ')}`]
+      state.processes.push(
+        start(service.name, service.port, `http://localhost:${service.port}/actuator/health`, join(ROOT, 'gradlew'), gradleArgs, ROOT),
+      )
+      writeState(state)
+    }
+    state.processes.push(
+      start('web', PORTS.web, WEB_URL, 'npm', ['run', 'dev', '--', '--port', String(PORTS.web), '--strictPort'], WEB_DIR, {
+        BANKDASH_API_URL: `http://localhost:${PORTS.gateway}`,
+      }),
+    )
+    writeState(state)
+
+    log('Waiting for every service to be healthy…')
+    await Promise.all(state.processes.map((p) => waitHealthy(p)))
+    for (const p of state.processes) {
+      const [appPid] = listeners(p.port)
+      // The listener is ours: the port was free before we started the service.
+      if (appPid !== undefined && appPid !== p.pid) p.app = { pid: appPid, started: startTime(appPid)! }
+    }
+    writeState(state)
+    log(`The e2e stack is up: ${WEB_URL} (logs in ${LOG_DIR})`)
+  } catch (error) {
+    log('Starting the e2e stack failed; stopping what was started.')
+    await down()
+    throw error
+  } finally {
+    process.off('SIGINT', stopOnSignal)
+    process.off('SIGTERM', stopOnSignal)
+  }
+}
+
+export async function down(): Promise<void> {
+  const state = readState()
+  if (!state) {
+    log('Nothing to stop: no e2e stack was started by this script.')
+    return
+  }
+  for (const p of [...state.processes].reverse()) {
+    if (p.app && isOurs(p.app)) await stop(p.app.pid, false)
+    if (isOurs(p)) await stop(p.pid, true)
+  }
+  if (state.compose) {
+    log('Removing the e2e Postgres and Kafka containers and volumes…')
+    compose(['down', '-v'], 'inherit')
+  }
+  rmSync(STATE_FILE, { force: true })
+  log('The e2e stack is stopped.')
+}
+
+/** True if a stack started by this script is running and healthy. */
+export async function isRunning(): Promise<boolean> {
+  const state = readState()
+  return state !== undefined && (await isHealthy(state))
+}
+
+function start(
+  name: string,
+  port: number,
+  healthUrl: string,
+  cmd: string,
+  args: string[],
+  cwd: string,
+  env: Record<string, string> = {},
+): Started {
+  const out = openSync(join(LOG_DIR, `${name}.log`), 'w')
+  // Its own process group, so `down` can signal the launcher and everything it forked (npm → vite).
+  const child = spawn(cmd, args, { cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', out, out] })
+  child.unref()
+  if (child.pid === undefined) throw new Error(`Could not start ${name}`)
+  log(`Started ${name} (PID ${child.pid}) on port ${port}`)
+  return { name, port, healthUrl, pid: child.pid, started: startTime(child.pid) ?? '' }
+}
+
+async function stop(pid: number, group: boolean): Promise<void> {
+  const signal = (sig: NodeJS.Signals) => {
+    try {
+      process.kill(group ? -pid : pid, sig)
+    } catch {
+      // Already gone.
+    }
+  }
+  signal(group ? 'SIGINT' : 'SIGTERM')
+  const deadline = Date.now() + STOP_TIMEOUT_MS
+  while (alive(pid) && Date.now() < deadline) await sleep(250)
+  if (alive(pid)) signal('SIGKILL')
+}
+
+async function waitHealthy(p: Started): Promise<void> {
+  const deadline = Date.now() + HEALTH_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (await healthy(p.healthUrl)) return
+    if (!alive(p.pid)) throw new Error(`${p.name} exited during startup, see ${join(LOG_DIR, `${p.name}.log`)}`)
+    await sleep(1000)
+  }
+  throw new Error(`${p.name} was not healthy after ${HEALTH_TIMEOUT_MS / 1000} s, see ${join(LOG_DIR, `${p.name}.log`)}`)
+}
+
+async function isHealthy(state: State): Promise<boolean> {
+  if (state.processes.length < SERVICES.length + 1 || !state.processes.every(isOurs)) return false
+  const results = await Promise.all(state.processes.map((p) => healthy(p.healthUrl)))
+  return results.every(Boolean)
+}
+
+async function healthy(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2000) })
+    if (!response.ok) return false
+    if (!url.includes('/actuator/health')) return true
+    return ((await response.json()) as { status?: string }).status === 'UP'
+  } catch {
+    return false
+  }
+}
+
+function isOurs(p: Proc): boolean {
+  return alive(p.pid) && startTime(p.pid) === p.started
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function startTime(pid: number): string | undefined {
+  return run('ps', ['-o', 'lstart=', '-p', String(pid)]).trim() || undefined
+}
+
+function command(pid: number): string {
+  return run('ps', ['-o', 'command=', '-p', String(pid)]).trim()
+}
+
+function listeners(port: number): number[] {
+  return run('lsof', ['-nP', '-t', `-iTCP:${port}`, '-sTCP:LISTEN'])
+    .split('\n')
+    .filter(Boolean)
+    .map(Number)
+}
+
+/** Output of a command, or "" if it fails (lsof and ps exit 1 when they find nothing). */
+function run(cmd: string, args: string[]): string {
+  try {
+    return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+  } catch {
+    return ''
+  }
+}
+
+function compose(args: string[], stdio: 'pipe' | 'inherit' = 'pipe'): string {
+  return (
+    execFileSync('docker', ['compose', ...args], { cwd: ROOT, env: composeEnv, encoding: 'utf8', stdio: ['ignore', stdio, 'inherit'] }) ?? ''
+  )
+}
+
+function readState(): State | undefined {
+  return existsSync(STATE_FILE) ? (JSON.parse(readFileSync(STATE_FILE, 'utf8')) as State) : undefined
+}
+
+function writeState(state: State): void {
+  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function log(message: string): void {
+  console.log(`[e2e stack] ${message}`)
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const action = process.argv[2]
+  const actions: Record<string, () => Promise<void>> = { up, down }
+  if (!actions[action ?? '']) {
+    console.error('Usage: node scripts/stack.ts up|down')
+    process.exit(2)
+  }
+  actions[action!]!().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : error)
+    process.exit(1)
+  })
+}

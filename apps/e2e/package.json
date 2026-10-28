@@ -1,0 +1,26 @@
+{
+  "name": "bankdash-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "stack:up": "node scripts/stack.ts up",
+    "stack:down": "node scripts/stack.ts down",
+    "test": "playwright test",
+    "e2e": "node scripts/e2e.ts",
+    "report": "playwright show-report",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^24.13.3",
+    "@types/pg": "^8.23.1",
+    "oxlint": "^1.81.0",
+    "pg": "^8.23.1",
+    "typescript": "~6.0.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
