@@ -48,11 +48,11 @@ test.describe('with several cards, two of them blocked', () => {
   let first: Card, second: Card, third: Card, fourth: Card
 
   test.beforeEach(async ({ api }) => {
-    ;[first] = await api.cards()
+    first = (await api.cards())[0]!
     second = await api.addCard('CHECKING', PINS[0])
     third = await api.addCard('SAVINGS', PINS[1])
     fourth = await api.addCard('CHECKING', PINS[2])
-    await api.blockCard(first!.id)
+    await api.blockCard(first.id)
     await api.blockCard(third.id)
   })
 
@@ -62,7 +62,7 @@ test.describe('with several cards, two of them blocked', () => {
     await page.goto('/credit-cards')
     const shown = await maskedNumbers(page, 'Cards')
 
-    expect(shown).toEqual([fourth, second, third, first!].map((card) => card.maskedNumber))
+    expect(shown).toEqual([fourth, second, third, first].map((card) => card.maskedNumber))
     for (const number of shown) expect(number).toMatch(MASKED)
   })
 
