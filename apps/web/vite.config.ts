@@ -11,7 +11,8 @@ export default defineConfig({
     strictPort: true,
     // Same origin for the browser: the refresh cookie is first-party and no CORS is involved.
     proxy: {
-      '/api': 'http://localhost:8080',
+      // apps/e2e points this at its own gateway port. Empty counts as not set.
+      '/api': process.env.BANKDASH_API_URL || 'http://localhost:8080',
     },
   },
   test: {

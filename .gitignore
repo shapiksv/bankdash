@@ -25,3 +25,5 @@ coverage/
 
 # Local smoke-test output of /spec-implement
 specs/*/smoke-test.log
+# Local e2e output of /spec-implement, /ui-test and /spec-verify
+specs/*/e2e-test.log

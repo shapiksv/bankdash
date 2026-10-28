@@ -1,0 +1,7 @@
+# Playwright artifacts: traces, screenshots and reports of failed runs
+test-results/
+playwright-report/
+blob-report/
+
+# scripts/stack.ts: state of the started processes and their logs
+.stack/
